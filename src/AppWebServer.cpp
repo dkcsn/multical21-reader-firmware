@@ -233,7 +233,6 @@ void AppWebServer::handleRoot() {
   const String deviceIp = wifiConnected ? WiFi.localIP().toString() : String("192.168.4.1");
   const uint32_t frameAgeSeconds = waterData.valid ? (millis() - waterData.lastFrameMillis) / 1000 : 0;
   const bool radioLive = waterData.valid && frameAgeSeconds < 90;
-  const bool ntpSynced = systemTimeSynced();
 
   String body;
   if (onboardingMode) {
@@ -266,28 +265,12 @@ void AppWebServer::handleRoot() {
   body += formatM3(history.getLast24HoursMilliM3());
   body += F(" m3 last 24h</small></article>");
 
-  body += F("<article class=\"card accentWifi\"><div class=\"cardTop\"><span>WiFi</span><b class=\"chip ");
-  body += wifiConnected ? F("ok\">Connected") : F("warn\">Setup AP");
-  body += F("</b></div><strong>");
-  body += htmlEscape(deviceIp);
-  body += F("</strong><small>");
-  body += wifiConnected ? htmlEscape(cfg.wifiSsid) : String("Multical21-Setup");
-  body += F("</small></article>");
-
   body += F("<article class=\"card accentMqtt\"><div class=\"cardTop\"><span>MQTT</span><b class=\"chip ");
   body += cfg.mqttEnabled ? F("ok\">Enabled") : F("off\">Disabled");
   body += F("</b></div><strong>");
   body += cfg.mqttEnabled ? htmlEscape(cfg.mqttBaseTopic) : String("Off");
   body += F("</strong><small>");
   body += cfg.homeAssistantDiscovery ? F("Home Assistant discovery on") : F("Home Assistant discovery off");
-  body += F("</small></article>");
-
-  body += F("<article class=\"card accentTime\"><div class=\"cardTop\"><span>Time</span><b class=\"chip ");
-  body += ntpSynced ? F("ok\">Synced") : F("warn\">Pending");
-  body += F("</b></div><strong>");
-  body += ntpSynced ? F("NTP") : F("Waiting");
-  body += F("</strong><small>");
-  body += htmlEscape(cfg.ntpServer);
   body += F("</small></article>");
 
   body += F("<article class=\"card accentMeter\"><div class=\"cardTop\"><span>Meter</span><b class=\"chip ");
@@ -684,12 +667,15 @@ void AppWebServer::handleResetConfig() {
 void AppWebServer::sendHtml(const String& body) {
   const uint32_t frameAgeSeconds = waterData.valid ? (millis() - waterData.lastFrameMillis) / 1000 : 0;
   const bool radioLive = waterData.valid && frameAgeSeconds < 90;
+  const bool wifiConnected = WiFi.status() == WL_CONNECTED;
+  const bool ntpSynced = systemTimeSynced();
+  const AppConfigData& cfg = config.data();
   String html;
   html += F("<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">");
   html += F("<title>Multical 21 Reader</title><style>");
   html += F("body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#eef3f7;color:#111827}");
   html += F("header{background:#12344d;color:white;padding:14px 20px;border-bottom:4px solid #0b7285;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}main{max-width:980px;margin:0 auto;padding:18px}");
-  html += F("nav{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}nav a,.rxStatus{color:white;text-decoration:none;border:1px solid #486581;border-radius:6px;padding:7px 9px;font-weight:700;font-size:13px;display:inline-flex;align-items:center;gap:6px}nav svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.rxStatus{background:#0f2f46}.rxDot{width:9px;height:9px;border-radius:50%;background:#627d98}.rxLive .rxDot{background:#2f9e44;box-shadow:0 0 0 4px rgba(47,158,68,.18)}.rxStale .rxDot{background:#b7791f}.rxWaiting .rxDot{background:#627d98}");
+  html += F("nav{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}nav a,.statusPill{color:white;text-decoration:none;border:1px solid #486581;border-radius:6px;padding:7px 9px;font-weight:700;font-size:13px;display:inline-flex;align-items:center;gap:6px}nav svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.statusPill{background:#0f2f46}.statusDot{width:9px;height:9px;border-radius:50%;background:#627d98}.statusOk .statusDot{background:#2f9e44;box-shadow:0 0 0 4px rgba(47,158,68,.18)}.statusWarn .statusDot{background:#b7791f}.statusOff .statusDot{background:#627d98}.statusText{max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
   html += F("section{background:white;border:1px solid #d9e2ec;border-radius:8px;padding:16px;margin:0 0 16px}");
   html += F("h1{font-size:24px;margin:0}h2{font-size:18px;margin:0 0 12px}dl{display:grid;grid-template-columns:160px 1fr;gap:8px;margin:0}");
   html += F("dt{color:#52606d}dd{margin:0;font-weight:600}form{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}");
@@ -706,11 +692,25 @@ void AppWebServer::sendHtml(const String& body) {
   html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0;min-height:1px}.barwrap:nth-child(2n) .bar{background:#147d64}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
   html += F("@media(max-width:640px){main{padding:12px}.hero{grid-template-columns:1fr}.hero h2{font-size:24px}dl{grid-template-columns:1fr}.heroMeter strong{font-size:30px}}");
   html += F("</style></head><body><header><h1>Multical 21 Reader</h1><nav>");
-  html += F("<span class=\"rxStatus ");
-  html += radioLive ? F("rxLive") : (waterData.valid ? F("rxStale") : F("rxWaiting"));
-  html += F("\"><span class=\"rxDot\"></span>");
+  html += F("<span class=\"statusPill ");
+  html += radioLive ? F("statusOk") : (waterData.valid ? F("statusWarn") : F("statusOff"));
+  html += F("\" title=\"Latest Multical wireless M-Bus frame\"><span class=\"statusDot\"></span><span class=\"statusText\">");
   html += radioLive ? F("RX Live") : (waterData.valid ? String("RX ") + String(frameAgeSeconds) + String("s") : String("RX Waiting"));
-  html += F("</span>");
+  html += F("</span></span>");
+  html += F("<span class=\"statusPill ");
+  html += wifiConnected ? F("statusOk") : F("statusWarn");
+  html += F("\" title=\"");
+  html += wifiConnected ? htmlEscape(WiFi.localIP().toString()) : String("Setup AP 192.168.4.1");
+  html += F("\"><span class=\"statusDot\"></span><span class=\"statusText\">");
+  html += wifiConnected ? htmlEscape(cfg.wifiSsid) : String("Setup AP");
+  html += F("</span></span>");
+  html += F("<span class=\"statusPill ");
+  html += ntpSynced ? F("statusOk") : (cfg.ntpEnabled ? F("statusWarn") : F("statusOff"));
+  html += F("\" title=\"");
+  html += cfg.ntpEnabled ? htmlEscape(cfg.ntpServer) : String("NTP disabled");
+  html += F("\"><span class=\"statusDot\"></span><span class=\"statusText\">");
+  html += ntpSynced ? F("NTP Synced") : (cfg.ntpEnabled ? F("NTP Waiting") : F("NTP Off"));
+  html += F("</span></span>");
   html += F("<a href=\"/\" title=\"Dashboard\"><svg viewBox=\"0 0 24 24\"><path d=\"M3 12l9-9 9 9\"></path><path d=\"M5 10v10h14V10\"></path></svg><span>Dashboard</span></a>");
   html += F("<a href=\"/setup\" title=\"Setup\"><svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"3\"></circle><path d=\"M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.1 2.1-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V20h-3v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-2.1-2.1.1-.1A1.7 1.7 0 0 0 5 15a1.7 1.7 0 0 0-1.5-1H3v-3h.5A1.7 1.7 0 0 0 5 10a1.7 1.7 0 0 0-.3-1.9l-.1-.1 2.1-2.1.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V4h3v.8a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 2.1 2.1-.1.1A1.7 1.7 0 0 0 19 10a1.7 1.7 0 0 0 1.5 1h.5v3h-.5a1.7 1.7 0 0 0-1.1 1z\"></path></svg><span>Setup</span></a>");
   html += F("<a href=\"/graphs\" title=\"Graphs\"><svg viewBox=\"0 0 24 24\"><path d=\"M4 19V5\"></path><path d=\"M4 19h16\"></path><path d=\"M8 16v-4\"></path><path d=\"M12 16V8\"></path><path d=\"M16 16v-6\"></path></svg><span>Graphs</span></a>");
