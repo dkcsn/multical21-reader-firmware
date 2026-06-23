@@ -56,7 +56,10 @@ bool setupApMode = false;
 bool radioStarted = false;
 unsigned long lastMqttAttempt = 0;
 unsigned long lastMqttPublish = 0;
+unsigned long lastNtpAttempt = 0;
 bool haDiscoveryPublished = false;
+bool ntpConfigured = false;
+bool ntpSyncLogged = false;
 
 static String chipIdHex() {
 #if defined(ESP32)
@@ -107,8 +110,30 @@ static void setupNtp() {
     return;
   }
   configTime(0, 0, appConfig.data().ntpServer);
+  lastNtpAttempt = millis();
+  ntpConfigured = true;
   Debug.print("NTP configured: ");
   Debug.println(appConfig.data().ntpServer);
+}
+
+static bool isNtpSynced() {
+  return time(nullptr) >= 1600000000;
+}
+
+static void loopNtp() {
+  if (setupApMode || !appConfig.data().ntpEnabled || WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+
+  if (!ntpConfigured || (!isNtpSynced() && millis() - lastNtpAttempt > 30000)) {
+    setupNtp();
+  }
+
+  if (!ntpSyncLogged && isNtpSynced()) {
+    ntpSyncLogged = true;
+    Debug.print("NTP synced: ");
+    Debug.println(appConfig.data().ntpServer);
+  }
 }
 
 static bool connectWifi() {
@@ -382,6 +407,7 @@ void loop() {
 
   webServer.handleClient();
   Debug.loop();
+  loopNtp();
   waterHistory.loop();
   startRadioIfConfigured();
 

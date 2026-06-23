@@ -8,6 +8,7 @@
   #include <WiFi.h>
   #include <Update.h>
 #endif
+#include <time.h>
 
 static String htmlEscape(const String& value) {
   String out = value;
@@ -46,6 +47,10 @@ static void copyArg(char* dest, size_t len, const String& value) {
 
 static String formatM3(uint32_t milliM3) {
   return String(milliM3 / 1000.0f, 3);
+}
+
+static bool systemTimeSynced() {
+  return time(nullptr) >= 1600000000;
 }
 
 static String graphBars(WaterHistory& history, bool days) {
@@ -103,15 +108,15 @@ static String buildSetupSection(AppConfig& config, bool onboardingMode) {
   out += onboardingMode ? F("WiFi onboarding") : F("Setup");
   out += F("</h2><span>");
   out += onboardingMode ? F("Setup AP") : F("Settings");
-  out += F("</span></div><form method=\"post\" action=\"/save\">");
-  out += F("<label>WiFi SSID<input id=\"wifiSsid\" name=\"wifiSsid\" value=\"");
+  out += F("</span></div><form class=\"setupForm\" method=\"post\" action=\"/save\">");
+  out += F("<div class=\"formSection\"><h3>WiFi</h3><div class=\"formGrid\"><label>WiFi SSID<input id=\"wifiSsid\" name=\"wifiSsid\" value=\"");
   out += htmlEscape(cfg.wifiSsid);
   out += F("\"></label>");
   out += F("<label>WiFi password<input id=\"wifiPassword\" name=\"wifiPassword\" type=\"password\" placeholder=\"");
   out += htmlEscape(config.maskedWifiPassword());
   out += F("\"></label>");
-  out += F("<div class=\"wifiActions\"><button type=\"button\" onclick=\"scanWifi()\">Scan WiFi</button><button type=\"button\" onclick=\"testWifi()\">Test WiFi</button><span id=\"wifiResult\"></span></div><div id=\"wifiList\" class=\"wifiList\"></div>");
-  out += F("<label>NTP enabled<select name=\"ntpEnabled\"><option value=\"1\"");
+  out += F("</div><div class=\"wifiActions\"><button type=\"button\" onclick=\"scanWifi()\">Scan WiFi</button><button type=\"button\" onclick=\"testWifi()\">Test WiFi</button><span id=\"wifiResult\"></span></div><div id=\"wifiList\" class=\"wifiList\"></div></div>");
+  out += F("<div class=\"formSection\"><h3>Time</h3><div class=\"formGrid\"><label>NTP enabled<select name=\"ntpEnabled\"><option value=\"1\"");
   out += cfg.ntpEnabled ? F(" selected") : F("");
   out += F(">Enabled</option><option value=\"0\"");
   out += !cfg.ntpEnabled ? F(" selected") : F("");
@@ -121,8 +126,10 @@ static String buildSetupSection(AppConfig& config, bool onboardingMode) {
   out += F("\"></label>");
   out += F("<label>Timezone offset minutes<input name=\"timezoneOffsetMinutes\" inputmode=\"numeric\" value=\"");
   out += String(cfg.timezoneOffsetMinutes);
-  out += F("\"></label>");
-  out += F("<label>MQTT enabled<select name=\"mqttEnabled\"><option value=\"1\"");
+  out += F("\"></label><div class=\"statusLine\"><span>NTP status</span><strong>");
+  out += systemTimeSynced() ? F("Synced") : F("Waiting");
+  out += F("</strong></div></div></div>");
+  out += F("<div class=\"formSection\"><h3>MQTT</h3><div class=\"formGrid\"><label>MQTT enabled<select name=\"mqttEnabled\"><option value=\"1\"");
   out += cfg.mqttEnabled ? F(" selected") : F("");
   out += F(">Enabled</option><option value=\"0\"");
   out += !cfg.mqttEnabled ? F(" selected") : F("");
@@ -151,8 +158,8 @@ static String buildSetupSection(AppConfig& config, bool onboardingMode) {
   out += cfg.mqttSecure ? F(" selected") : F("");
   out += F(">Enabled</option><option value=\"0\"");
   out += !cfg.mqttSecure ? F(" selected") : F("");
-  out += F(">Disabled</option></select></label>");
-  out += F("<label>Home Assistant discovery<select name=\"homeAssistantDiscovery\"><option value=\"1\"");
+  out += F(">Disabled</option></select></label></div></div>");
+  out += F("<div class=\"formSection\"><h3>Integrations</h3><div class=\"formGrid\"><label>Home Assistant discovery<select name=\"homeAssistantDiscovery\"><option value=\"1\"");
   out += cfg.homeAssistantDiscovery ? F(" selected") : F("");
   out += F(">Enabled</option><option value=\"0\"");
   out += !cfg.homeAssistantDiscovery ? F(" selected") : F("");
@@ -164,16 +171,16 @@ static String buildSetupSection(AppConfig& config, bool onboardingMode) {
   out += cfg.telnetDebugEnabled ? F(" selected") : F("");
   out += F(">Enabled</option><option value=\"0\"");
   out += !cfg.telnetDebugEnabled ? F(" selected") : F("");
-  out += F(">Disabled</option></select></label>");
-  out += F("<label>Meter serial hex<input name=\"meterSerial\" value=\"");
+  out += F(">Disabled</option></select></label></div></div>");
+  out += F("<div class=\"formSection\"><h3>Meter</h3><div class=\"formGrid\"><label>Meter serial hex<input name=\"meterSerial\" value=\"");
   out += htmlEscape(config.meterSerialHex());
   out += F("\" maxlength=\"8\"></label>");
   out += F("<label>AES key hex<input name=\"encryptionKey\" type=\"password\" placeholder=\"");
   out += config.hasMeter() ? F("***") : F("32 hex chars");
-  out += F("\" maxlength=\"32\"></label>");
-  out += F("<button type=\"submit\">Save</button></form>");
-  out += F("<form method=\"post\" action=\"/reboot\"><button type=\"submit\">Reboot</button></form>");
-  out += F("<form method=\"post\" action=\"/reset-config\"><button class=\"danger\" type=\"submit\">Reset setup</button></form></section>");
+  out += F("\" maxlength=\"32\"></label></div></div>");
+  out += F("<div class=\"actionRow\"><button type=\"submit\">Save settings</button></div></form>");
+  out += F("<div class=\"formSection deviceActions\"><h3>Device actions</h3><div class=\"actionRow\"><form method=\"post\" action=\"/reboot\"><button type=\"submit\">Reboot</button></form>");
+  out += F("<form method=\"post\" action=\"/reset-config\"><button class=\"danger\" type=\"submit\">Reset setup</button></form></div></div></section>");
   return out;
 }
 
@@ -219,6 +226,7 @@ void AppWebServer::handleRoot() {
   const String deviceIp = wifiConnected ? WiFi.localIP().toString() : String("192.168.4.1");
   const uint32_t frameAgeSeconds = waterData.valid ? (millis() - waterData.lastFrameMillis) / 1000 : 0;
   const bool radioLive = waterData.valid && frameAgeSeconds < 90;
+  const bool ntpSynced = systemTimeSynced();
 
   String body;
   if (onboardingMode) {
@@ -268,9 +276,9 @@ void AppWebServer::handleRoot() {
   body += F("</small></article>");
 
   body += F("<article class=\"card accentTime\"><div class=\"cardTop\"><span>Time</span><b class=\"chip ");
-  body += history.isTimeSynced() ? F("ok\">Synced") : F("warn\">Pending");
+  body += ntpSynced ? F("ok\">Synced") : F("warn\">Pending");
   body += F("</b></div><strong>");
-  body += history.wasLoaded() ? F("Persistent") : F("New");
+  body += ntpSynced ? F("NTP") : F("Waiting");
   body += F("</strong><small>");
   body += htmlEscape(cfg.ntpServer);
   body += F("</small></article>");
@@ -685,7 +693,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F(".hero{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:18px;align-items:center;background:#12344d;color:white;border-color:#12344d}.hero h2{font-size:28px;margin:0 0 8px}.eyebrow{margin:0 0 6px;color:#9fb3c8;font-size:12px;font-weight:800;text-transform:uppercase}.heroText{margin:0;color:#d9e2ec}.heroMeter{border:1px solid #486581;border-radius:8px;padding:14px;background:#0f2f46}.heroMeter span,.heroMeter small{display:block;color:#bcccdc}.heroMeter strong{display:block;font-size:34px;line-height:1.1;margin:4px 0}");
   html += F(".cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;background:transparent;border:0;padding:0}.card{background:white;border:1px solid #d9e2ec;border-left:5px solid #0b7285;border-radius:8px;padding:14px;min-height:108px;display:grid;gap:10px}.cardTop{display:flex;justify-content:space-between;gap:8px;align-items:center}.cardTop span{font-size:12px;color:#52606d;font-weight:800;text-transform:uppercase}.card strong{font-size:22px;line-height:1.15;overflow-wrap:anywhere}.card small{color:#52606d;overflow-wrap:anywhere}.card a{font-size:22px;font-weight:800}.chip{border-radius:999px;padding:4px 8px;font-size:11px;color:white;white-space:nowrap}.ok{background:#147d64}.warn{background:#b7791f}.off{background:#627d98}.accentRx{border-left-color:#147d64}.accentWater{border-left-color:#0b7285}.accentUsage{border-left-color:#2f9e44}.accentWifi{border-left-color:#1864ab}.accentMqtt{border-left-color:#6741d9}.accentTime{border-left-color:#d9480f}.accentMeter{border-left-color:#c2410c}.accentVersion{border-left-color:#087f5b}");
   html += F(".sectionHead{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin:0 0 10px}.sectionHead h2{margin:0}.sectionHead span{color:#52606d;font-size:12px;font-weight:700;text-transform:uppercase}.graphPanel{padding-bottom:12px}.graphSummary{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px}.graphSummary span{background:#f0f4f8;border:1px solid #d9e2ec;border-radius:6px;padding:7px 9px;color:#52606d;font-size:12px}.graphSummary strong{color:#102a43}");
-  html += F(".setupPanel{border-left:5px solid #0b7285}.onboardingPanel{border-color:#0b7285;background:#f8fcfd}.onboardingPanel .sectionHead h2{font-size:24px}.onboardingPanel form{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}");
+  html += F(".setupPanel{border-left:5px solid #0b7285}.setupForm{display:block}.formSection{border-top:1px solid #d9e2ec;padding-top:14px;margin-top:14px}.formSection:first-of-type{border-top:0;padding-top:0}.formSection h3{font-size:15px;margin:0 0 10px;color:#102a43}.formGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.actionRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.actionRow form{display:block}.actionRow button{min-width:170px}.statusLine{border:1px solid #d9e2ec;border-radius:6px;padding:10px;background:#f8fafc;display:grid;gap:4px;color:#52606d}.statusLine strong{color:#102a43}.deviceActions{padding-bottom:0}.onboardingPanel{border-color:#0b7285;background:#f8fcfd}.onboardingPanel .sectionHead h2{font-size:24px}");
   html += F(".wifiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.wifiActions span{font-size:13px;color:#334e68}.wifiList{grid-column:1/-1;display:grid;gap:6px}.wifiNet{display:flex;justify-content:space-between;gap:10px;border:1px solid #d9e2ec;border-radius:6px;padding:8px;background:#f8fafc;cursor:pointer}.wifiNet small{color:#52606d}");
   html += F(".bars{height:180px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden;background:linear-gradient(to top,#f8fafc,#fff)}");
   html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0;min-height:1px}.barwrap:nth-child(2n) .bar{background:#147d64}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
