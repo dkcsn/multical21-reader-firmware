@@ -20,6 +20,8 @@ Current firmware baseline:
 - Supports WiFi scan and WiFi credential test from the setup UI.
 - Serves AMS-style pages on port 80: dashboard `/`, setup `/setup`, graphs
   `/graphs`, firmware upload `/firmware`.
+- Shows icon navigation and an RX indicator for Multical frame freshness in the
+  top bar.
 - Stores configuration in EEPROM instead of requiring a local `credentials.h`.
 - Supports NTP time sync for calendar-aligned graph buckets.
 - Shows hourly and daily water graphs with total and peak summaries.
