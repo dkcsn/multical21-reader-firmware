@@ -49,6 +49,44 @@ static String formatM3(uint32_t milliM3) {
   return String(milliM3 / 1000.0f, 3);
 }
 
+static String meterStatusText(const WaterData& data) {
+  if (!data.valid) {
+    return F("Meter Waiting");
+  }
+
+  String status;
+  if (data.alarms.burst) {
+    status += F("Burst alarm");
+  }
+  if (data.alarms.leak) {
+    if (status.length() > 0) status += F(" + ");
+    status += F("Leak suspected");
+  }
+  if (data.alarms.dry) {
+    if (status.length() > 0) status += F(" + ");
+    status += F("Dry / no water");
+  }
+  if (data.alarms.reverse) {
+    if (status.length() > 0) status += F(" + ");
+    status += F("Reverse flow");
+  }
+
+  return status.length() > 0 ? status : String("Meter OK");
+}
+
+static String meterStatusClass(const WaterData& data) {
+  if (!data.valid) {
+    return F("statusOff");
+  }
+  if (data.alarms.burst || data.alarms.leak) {
+    return F("statusAlarm");
+  }
+  if (data.alarms.dry || data.alarms.reverse) {
+    return F("statusWarn");
+  }
+  return F("statusOk");
+}
+
 static bool systemTimeSynced() {
   return time(nullptr) >= 1600000000;
 }
@@ -526,6 +564,9 @@ void AppWebServer::handleDataJson() {
   json += waterData.waterTemperatureC;
   json += F(",\"ambient_temperature_c\":");
   json += waterData.ambientTemperatureC;
+  json += F(",\"meter_status\":\"");
+  json += jsonEscape(meterStatusText(waterData));
+  json += F("\"");
   json += F(",\"alarms\":{\"burst\":");
   json += waterData.alarms.burst ? F("true") : F("false");
   json += F(",\"leak\":");
@@ -737,7 +778,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("<title>Multical 21 Reader</title><style>");
   html += F("body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#eef3f7;color:#111827}");
   html += F("header{background:#12344d;color:white;padding:14px 20px;border-bottom:4px solid #0b7285;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}main{max-width:980px;margin:0 auto;padding:18px}");
-  html += F("nav{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}nav a,.statusPill{color:white;text-decoration:none;border:1px solid #486581;border-radius:6px;padding:7px 9px;font-weight:700;font-size:13px;display:inline-flex;align-items:center;gap:6px}nav svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.statusPill{background:#0f2f46}.statusDot{width:9px;height:9px;border-radius:50%;background:#627d98}.statusOk .statusDot{background:#2f9e44;box-shadow:0 0 0 4px rgba(47,158,68,.18)}.statusWarn .statusDot{background:#b7791f}.statusOff .statusDot{background:#627d98}.statusText{max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
+  html += F("nav{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto;align-items:center}nav a,.statusPill{color:white;text-decoration:none;border:1px solid #486581;border-radius:6px;padding:7px 9px;font-weight:700;font-size:13px;display:inline-flex;align-items:center;gap:6px}nav svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.statusPill{background:#0f2f46}.statusDot{width:9px;height:9px;border-radius:50%;background:#627d98}.statusOk .statusDot{background:#2f9e44;box-shadow:0 0 0 4px rgba(47,158,68,.18)}.statusWarn .statusDot{background:#b7791f;box-shadow:0 0 0 4px rgba(183,121,31,.18)}.statusAlarm .statusDot{background:#c92a2a;box-shadow:0 0 0 4px rgba(201,42,42,.2)}.statusOff .statusDot{background:#627d98}.statusText{max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
   html += F("section{background:white;border:1px solid #d9e2ec;border-radius:8px;padding:16px;margin:0 0 16px}");
   html += F("h1{font-size:24px;margin:0}h2{font-size:18px;margin:0 0 12px}dl{display:grid;grid-template-columns:160px 1fr;gap:8px;margin:0}");
   html += F("dt{color:#52606d}dd{margin:0;font-weight:600}form{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}");
@@ -758,6 +799,11 @@ void AppWebServer::sendHtml(const String& body) {
   html += radioLive ? F("statusOk") : (waterData.valid ? F("statusWarn") : F("statusOff"));
   html += F("\" title=\"Latest Multical wireless M-Bus frame\"><span class=\"statusDot\"></span><span class=\"statusText\">");
   html += radioLive ? F("RX Live") : (waterData.valid ? String("RX ") + String(frameAgeSeconds) + String("s") : String("RX Waiting"));
+  html += F("</span></span>");
+  html += F("<span class=\"statusPill ");
+  html += meterStatusClass(waterData);
+  html += F("\" title=\"Meter status from Multical alarm bits\"><span class=\"statusDot\"></span><span class=\"statusText\">");
+  html += htmlEscape(meterStatusText(waterData));
   html += F("</span></span>");
   html += F("<span class=\"statusPill ");
   html += wifiConnected ? F("statusOk") : F("statusWarn");
