@@ -116,21 +116,63 @@ void AppWebServer::handleClient() {
 
 void AppWebServer::handleRoot() {
   const AppConfigData& cfg = config.data();
+  const bool wifiConnected = WiFi.status() == WL_CONNECTED;
+  const String deviceIp = wifiConnected ? WiFi.localIP().toString() : String("192.168.4.1");
   String body;
-  body.reserve(7000);
-  body += F("<section><h2>Status</h2><dl>");
-  body += F("<dt>WiFi</dt><dd>");
-  body += WiFi.status() == WL_CONNECTED ? htmlEscape(WiFi.localIP().toString()) : F("Setup AP");
-  body += F("</dd><dt>Meter configured</dt><dd>");
-  body += config.hasMeter() ? F("Yes") : F("No");
-  body += F("</dd><dt>Total</dt><dd>");
-  body += waterData.valid ? String(waterData.totalM3(), 3) + String(" m3") : String("No frame yet");
-  body += F("</dd><dt>Today</dt><dd>");
-  body += formatM3(history.getTodayMilliM3()) + String(" m3");
-  body += F("</dd><dt>Last 24 hours</dt><dd>");
-  body += formatM3(history.getLast24HoursMilliM3()) + String(" m3");
-  body += F("</dd><dt>Month usage</dt><dd>");
+  body.reserve(9000);
+  body += F("<section class=\"hero\"><div><p class=\"eyebrow\">Kamstrup Multical 21</p><h2>Water reader dashboard</h2><p class=\"heroText\">");
+  body += waterData.valid ? F("Live water meter data is being decoded and stored locally.") : F("Waiting for the first valid wireless M-Bus frame.");
+  body += F("</p></div><div class=\"heroMeter\"><span>Total</span><strong>");
+  body += waterData.valid ? String(waterData.totalM3(), 3) : String("--");
+  body += F("</strong><small>m3</small></div></section>");
+
+  body += F("<section class=\"cards\">");
+  body += F("<article class=\"card accentWater\"><div class=\"cardTop\"><span>Water</span><b class=\"chip ");
+  body += waterData.valid ? F("ok\">Live") : F("warn\">Waiting");
+  body += F("</b></div><strong>");
+  body += waterData.valid ? String(waterData.totalM3(), 3) : String("--");
+  body += F(" m3</strong><small>Month ");
   body += waterData.valid ? String(waterData.monthUsageM3(), 3) + String(" m3") : String("-");
+  body += F("</small></article>");
+
+  body += F("<article class=\"card accentUsage\"><div class=\"cardTop\"><span>Usage</span><b class=\"chip ok\">History</b></div><strong>");
+  body += formatM3(history.getTodayMilliM3());
+  body += F(" m3</strong><small>Today, ");
+  body += formatM3(history.getLast24HoursMilliM3());
+  body += F(" m3 last 24h</small></article>");
+
+  body += F("<article class=\"card accentWifi\"><div class=\"cardTop\"><span>WiFi</span><b class=\"chip ");
+  body += wifiConnected ? F("ok\">Connected") : F("warn\">Setup AP");
+  body += F("</b></div><strong>");
+  body += htmlEscape(deviceIp);
+  body += F("</strong><small>");
+  body += wifiConnected ? htmlEscape(cfg.wifiSsid) : String("Multical21-Setup");
+  body += F("</small></article>");
+
+  body += F("<article class=\"card accentMqtt\"><div class=\"cardTop\"><span>MQTT</span><b class=\"chip ");
+  body += cfg.mqttEnabled ? F("ok\">Enabled") : F("off\">Disabled");
+  body += F("</b></div><strong>");
+  body += cfg.mqttEnabled ? htmlEscape(cfg.mqttBaseTopic) : String("Off");
+  body += F("</strong><small>");
+  body += cfg.homeAssistantDiscovery ? F("Home Assistant discovery on") : F("Home Assistant discovery off");
+  body += F("</small></article>");
+
+  body += F("<article class=\"card accentTime\"><div class=\"cardTop\"><span>Time</span><b class=\"chip ");
+  body += history.isTimeSynced() ? F("ok\">Synced") : F("warn\">Pending");
+  body += F("</b></div><strong>");
+  body += history.wasLoaded() ? F("Persistent") : F("New");
+  body += F("</strong><small>");
+  body += htmlEscape(cfg.ntpServer);
+  body += F("</small></article>");
+
+  body += F("<article class=\"card accentTools\"><div class=\"cardTop\"><span>Tools</span><b class=\"chip ");
+  body += cfg.telnetDebugEnabled ? F("ok\">Telnet") : F("off\">Telnet off");
+  body += F("</b></div><strong><a href=\"/firmware\">Firmware</a></strong><small>Browser OTA and debug port 23</small></article>");
+  body += F("</section>");
+
+  body += F("<section><h2>Meter details</h2><dl>");
+  body += F("<dt>Meter configured</dt><dd>");
+  body += config.hasMeter() ? F("Yes") : F("No");
   body += F("</dd><dt>Water temp</dt><dd>");
   body += waterData.valid ? String(waterData.waterTemperatureC) + String(" C") : String("-");
   body += F("</dd><dt>Room temp</dt><dd>");
@@ -151,7 +193,7 @@ void AppWebServer::handleRoot() {
 
   body += F("<section><h2>Fibaro / local API</h2><dl>");
   body += F("<dt>State JSON</dt><dd><code>http://");
-  body += WiFi.status() == WL_CONNECTED ? htmlEscape(WiFi.localIP().toString()) : String("192.168.4.1");
+  body += htmlEscape(deviceIp);
   body += F("/data.json</code></dd><dt>Hourly plot</dt><dd><code>/dayplot.json</code></dd><dt>Daily plot</dt><dd><code>/monthplot.json</code></dd>");
   body += F("<dt>Sync rule</dt><dd>Use total_m3 as source of truth and treat data as stale when last_frame_age_s is high.</dd></dl></section>");
 
@@ -553,20 +595,23 @@ void AppWebServer::handleReboot() {
 
 void AppWebServer::sendHtml(const String& body) {
   String html;
-  html.reserve(body.length() + 1800);
+  html.reserve(body.length() + 2600);
   html += F("<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">");
   html += F("<title>Multical 21 Reader</title><style>");
-  html += F("body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#f6f7f9;color:#111827}");
-  html += F("header{background:#102a43;color:white;padding:18px 20px}main{max-width:880px;margin:0 auto;padding:18px}");
+  html += F("body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#eef3f7;color:#111827}");
+  html += F("header{background:#12344d;color:white;padding:18px 20px;border-bottom:4px solid #0b7285}main{max-width:980px;margin:0 auto;padding:18px}");
   html += F("section{background:white;border:1px solid #d9e2ec;border-radius:8px;padding:16px;margin:0 0 16px}");
   html += F("h1{font-size:24px;margin:0}h2{font-size:18px;margin:0 0 12px}dl{display:grid;grid-template-columns:160px 1fr;gap:8px;margin:0}");
   html += F("dt{color:#52606d}dd{margin:0;font-weight:600}form{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}");
-  html += F("code{font-size:12px;overflow-wrap:anywhere}label{display:grid;gap:5px;font-size:13px;color:#334e68}input,select{font:inherit;padding:10px;border:1px solid #bcccdc;border-radius:6px;background:white}");
+  html += F("code{font-size:12px;overflow-wrap:anywhere}a{color:#0b7285}label{display:grid;gap:5px;font-size:13px;color:#334e68}input,select{font:inherit;padding:10px;border:1px solid #bcccdc;border-radius:6px;background:white}");
   html += F("button,.buttonLink{font:inherit;padding:10px 14px;border:0;border-radius:6px;background:#0b7285;color:white;font-weight:700;cursor:pointer;align-self:end;text-decoration:none;display:inline-block}");
   html += F(".uploadForm{margin-top:14px}.hint{color:#52606d;font-size:13px;margin:12px 0 0}");
+  html += F(".hero{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:18px;align-items:center;background:#12344d;color:white;border-color:#12344d}.hero h2{font-size:28px;margin:0 0 8px}.eyebrow{margin:0 0 6px;color:#9fb3c8;font-size:12px;font-weight:800;text-transform:uppercase}.heroText{margin:0;color:#d9e2ec}.heroMeter{border:1px solid #486581;border-radius:8px;padding:14px;background:#0f2f46}.heroMeter span,.heroMeter small{display:block;color:#bcccdc}.heroMeter strong{display:block;font-size:34px;line-height:1.1;margin:4px 0}");
+  html += F(".cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;background:transparent;border:0;padding:0}.card{background:white;border:1px solid #d9e2ec;border-left:5px solid #0b7285;border-radius:8px;padding:14px;min-height:108px;display:grid;gap:10px}.cardTop{display:flex;justify-content:space-between;gap:8px;align-items:center}.cardTop span{font-size:12px;color:#52606d;font-weight:800;text-transform:uppercase}.card strong{font-size:22px;line-height:1.15;overflow-wrap:anywhere}.card small{color:#52606d}.card a{font-size:22px;font-weight:800}.chip{border-radius:999px;padding:4px 8px;font-size:11px;color:white;white-space:nowrap}.ok{background:#147d64}.warn{background:#b7791f}.off{background:#627d98}.accentWater{border-left-color:#0b7285}.accentUsage{border-left-color:#2f9e44}.accentWifi{border-left-color:#1864ab}.accentMqtt{border-left-color:#6741d9}.accentTime{border-left-color:#d9480f}.accentTools{border-left-color:#364fc7}");
   html += F(".wifiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.wifiActions span{font-size:13px;color:#334e68}.wifiList{grid-column:1/-1;display:grid;gap:6px}.wifiNet{display:flex;justify-content:space-between;gap:10px;border:1px solid #d9e2ec;border-radius:6px;padding:8px;background:#f8fafc;cursor:pointer}.wifiNet small{color:#52606d}");
   html += F(".bars{height:170px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden}");
   html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0;min-height:1px}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
+  html += F("@media(max-width:640px){main{padding:12px}.hero{grid-template-columns:1fr}.hero h2{font-size:24px}dl{grid-template-columns:1fr}.heroMeter strong{font-size:30px}}");
   html += F("</style></head><body><header><h1>Multical 21 Reader</h1></header><main>");
   html += body;
   html += F("</main><script>");

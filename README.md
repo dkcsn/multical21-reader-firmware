@@ -18,8 +18,8 @@ Current firmware baseline:
 - Provides captive portal redirects for common Android, iOS, Windows, and
   browser connectivity checks.
 - Supports WiFi scan and WiFi credential test from the setup UI.
-- Serves a small browser UI on port 80 for WiFi, MQTT, meter serial, and AES key
-  setup.
+- Serves an AMS-style browser dashboard on port 80 for water status, graphs,
+  WiFi, MQTT, tools, meter serial, and AES key setup.
 - Stores configuration in EEPROM instead of requiring a local `credentials.h`.
 - Supports NTP time sync for calendar-aligned graph buckets.
 - Publishes decoded water meter state to MQTT as JSON when MQTT is enabled.
