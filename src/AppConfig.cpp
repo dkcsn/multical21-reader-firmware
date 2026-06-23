@@ -1,7 +1,7 @@
 #include "AppConfig.h"
 #include <EEPROM.h>
 
-static const uint32_t CONFIG_MAGIC = 0x4D433232;
+static const uint32_t CONFIG_MAGIC = 0x4D433233;
 static const size_t EEPROM_SIZE = 1024;
 static const int EEPROM_ADDRESS = 0;
 
@@ -62,6 +62,7 @@ bool AppConfig::load() {
   config.wifiSsid[sizeof(config.wifiSsid) - 1] = '\0';
   config.wifiPassword[sizeof(config.wifiPassword) - 1] = '\0';
   config.ntpServer[sizeof(config.ntpServer) - 1] = '\0';
+  config.homeAssistantPrefix[sizeof(config.homeAssistantPrefix) - 1] = '\0';
   config.mqttHost[sizeof(config.mqttHost) - 1] = '\0';
   config.mqttUsername[sizeof(config.mqttUsername) - 1] = '\0';
   config.mqttPassword[sizeof(config.mqttPassword) - 1] = '\0';
@@ -72,6 +73,10 @@ bool AppConfig::load() {
   if (strlen(config.ntpServer) == 0) {
     strncpy(config.ntpServer, "pool.ntp.org", sizeof(config.ntpServer) - 1);
     config.ntpServer[sizeof(config.ntpServer) - 1] = '\0';
+  }
+  if (strlen(config.homeAssistantPrefix) == 0) {
+    strncpy(config.homeAssistantPrefix, "homeassistant", sizeof(config.homeAssistantPrefix) - 1);
+    config.homeAssistantPrefix[sizeof(config.homeAssistantPrefix) - 1] = '\0';
   }
   return true;
 }
@@ -148,6 +153,8 @@ void AppConfig::setDefaults() {
   config.mqttEnabled = false;
   config.mqttRetain = true;
   config.mqttSecure = false;
+  config.homeAssistantDiscovery = false;
+  strncpy(config.homeAssistantPrefix, "homeassistant", sizeof(config.homeAssistantPrefix) - 1);
   config.mqttPort = 1883;
   strncpy(config.mqttBaseTopic, "watermeter", sizeof(config.mqttBaseTopic) - 1);
 }

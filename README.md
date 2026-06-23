@@ -22,6 +22,8 @@ Current firmware baseline:
 - Publishes decoded water meter state to MQTT as JSON when MQTT is enabled.
 - Supports MQTT retain and secure MQTT/TLS mode. TLS currently uses an insecure
   client mode without CA validation, intended for local broker setups.
+- Supports Home Assistant MQTT discovery for water totals, usage windows,
+  temperatures, last frame age, and Multical alarm flags.
 - Tracks in-memory hourly and daily consumption history from the cumulative
   Multical 21 counter.
 - Persists graph history to LittleFS so charts can survive reboot.

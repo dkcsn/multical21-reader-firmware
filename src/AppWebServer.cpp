@@ -161,6 +161,14 @@ void AppWebServer::handleRoot() {
   body += F(">Enabled</option><option value=\"0\"");
   body += !cfg.mqttSecure ? F(" selected") : F("");
   body += F(">Disabled</option></select></label>");
+  body += F("<label>Home Assistant discovery<select name=\"homeAssistantDiscovery\"><option value=\"1\"");
+  body += cfg.homeAssistantDiscovery ? F(" selected") : F("");
+  body += F(">Enabled</option><option value=\"0\"");
+  body += !cfg.homeAssistantDiscovery ? F(" selected") : F("");
+  body += F(">Disabled</option></select></label>");
+  body += F("<label>HA discovery prefix<input name=\"homeAssistantPrefix\" value=\"");
+  body += htmlEscape(cfg.homeAssistantPrefix);
+  body += F("\"></label>");
   body += F("<label>Meter serial hex<input name=\"meterSerial\" value=\"");
   body += htmlEscape(config.meterSerialHex());
   body += F("\" maxlength=\"8\"></label>");
@@ -192,7 +200,11 @@ void AppWebServer::handleConfigJson() {
   json += cfg.mqttRetain ? F("true") : F("false");
   json += F(",\"mqttSecure\":");
   json += cfg.mqttSecure ? F("true") : F("false");
-  json += F(",\"mqttHost\":\"");
+  json += F(",\"homeAssistantDiscovery\":");
+  json += cfg.homeAssistantDiscovery ? F("true") : F("false");
+  json += F(",\"homeAssistantPrefix\":\"");
+  json += cfg.homeAssistantPrefix;
+  json += F("\",\"mqttHost\":\"");
   json += cfg.mqttHost;
   json += F("\",\"mqttPort\":");
   json += cfg.mqttPort;
@@ -296,6 +308,12 @@ void AppWebServer::handleSave() {
   cfg.mqttEnabled = server.arg("mqttEnabled") == "1";
   cfg.mqttRetain = server.arg("mqttRetain") == "1";
   cfg.mqttSecure = server.arg("mqttSecure") == "1";
+  cfg.homeAssistantDiscovery = server.arg("homeAssistantDiscovery") == "1";
+  copyArg(cfg.homeAssistantPrefix, sizeof(cfg.homeAssistantPrefix), server.arg("homeAssistantPrefix"));
+  if (strlen(cfg.homeAssistantPrefix) == 0) {
+    strncpy(cfg.homeAssistantPrefix, "homeassistant", sizeof(cfg.homeAssistantPrefix) - 1);
+    cfg.homeAssistantPrefix[sizeof(cfg.homeAssistantPrefix) - 1] = '\0';
+  }
   copyArg(cfg.mqttHost, sizeof(cfg.mqttHost), server.arg("mqttHost"));
   cfg.mqttPort = (uint16_t) server.arg("mqttPort").toInt();
   if (cfg.mqttPort == 0) {

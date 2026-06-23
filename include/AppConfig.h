@@ -13,6 +13,8 @@ struct AppConfigData {
   bool mqttEnabled;
   bool mqttRetain;
   bool mqttSecure;
+  bool homeAssistantDiscovery;
+  char homeAssistantPrefix[65];
   char mqttHost[129];
   uint16_t mqttPort;
   char mqttUsername[65];

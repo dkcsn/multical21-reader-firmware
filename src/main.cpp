@@ -54,6 +54,7 @@ bool setupApMode = false;
 bool radioStarted = false;
 unsigned long lastMqttAttempt = 0;
 unsigned long lastMqttPublish = 0;
+bool haDiscoveryPublished = false;
 
 static String chipIdHex() {
 #if defined(ESP32)
@@ -73,6 +74,22 @@ static String topic(const char* suffix) {
     return base + suffix;
   }
   return base + "/" + suffix;
+}
+
+static String haNodeId() {
+  return String("multical21_") + chipIdHex();
+}
+
+static String discoveryPrefix() {
+  String prefix = appConfig.data().homeAssistantPrefix;
+  prefix.trim();
+  if (prefix.length() == 0) {
+    prefix = "homeassistant";
+  }
+  if (prefix.endsWith("/")) {
+    prefix.remove(prefix.length() - 1);
+  }
+  return prefix;
 }
 
 static time_t localNow() {
@@ -160,6 +177,7 @@ static bool mqttConnect() {
     mqttClient.setClient(espMqttClient);
   }
   mqttClient.setServer(appConfig.data().mqttHost, appConfig.data().mqttPort);
+  mqttClient.setBufferSize(768);
   String clientId = String(ESP_NAME) + "-" + chipIdHex();
   String onlineTopic = topic("online");
 
@@ -188,8 +206,91 @@ static bool mqttConnect() {
     mqttClient.publish(onlineTopic.c_str(), "true", appConfig.data().mqttRetain);
     mqttClient.publish(topic("ip").c_str(), WiFi.localIP().toString().c_str(), appConfig.data().mqttRetain);
     Serial.println("MQTT connected");
+    haDiscoveryPublished = false;
   }
   return connected;
+}
+
+static void publishHaSensor(const char* key, const char* name, const char* unit, const char* deviceClass, const char* stateClass, const char* valueTemplate) {
+  String node = haNodeId();
+  String discoveryTopic = discoveryPrefix() + "/sensor/" + node + "/" + key + "/config";
+  String payload;
+  payload.reserve(620);
+  payload += "{\"name\":\"";
+  payload += name;
+  payload += "\",\"uniq_id\":\"";
+  payload += node;
+  payload += "_";
+  payload += key;
+  payload += "\",\"stat_t\":\"";
+  payload += topic("state");
+  payload += "\",\"avty_t\":\"";
+  payload += topic("online");
+  payload += "\",\"pl_avail\":\"true\",\"pl_not_avail\":\"false\",\"val_tpl\":\"";
+  payload += valueTemplate;
+  payload += "\"";
+  if (strlen(unit) > 0) {
+    payload += ",\"unit_of_meas\":\"";
+    payload += unit;
+    payload += "\"";
+  }
+  if (strlen(deviceClass) > 0) {
+    payload += ",\"dev_cla\":\"";
+    payload += deviceClass;
+    payload += "\"";
+  }
+  if (strlen(stateClass) > 0) {
+    payload += ",\"stat_cla\":\"";
+    payload += stateClass;
+    payload += "\"";
+  }
+  payload += ",\"dev\":{\"ids\":[\"";
+  payload += node;
+  payload += "\"],\"name\":\"Multical 21 Reader\",\"mf\":\"Kamstrup\",\"mdl\":\"Multical 21\"}}";
+  mqttClient.publish(discoveryTopic.c_str(), payload.c_str(), true);
+}
+
+static void publishHaBinarySensor(const char* key, const char* name, const char* valueTemplate) {
+  String node = haNodeId();
+  String discoveryTopic = discoveryPrefix() + "/binary_sensor/" + node + "/" + key + "/config";
+  String payload;
+  payload.reserve(560);
+  payload += "{\"name\":\"";
+  payload += name;
+  payload += "\",\"uniq_id\":\"";
+  payload += node;
+  payload += "_";
+  payload += key;
+  payload += "\",\"stat_t\":\"";
+  payload += topic("state");
+  payload += "\",\"avty_t\":\"";
+  payload += topic("online");
+  payload += "\",\"pl_avail\":\"true\",\"pl_not_avail\":\"false\",\"val_tpl\":\"";
+  payload += valueTemplate;
+  payload += "\",\"pl_on\":\"true\",\"pl_off\":\"false\",\"dev_cla\":\"problem\",\"dev\":{\"ids\":[\"";
+  payload += node;
+  payload += "\"],\"name\":\"Multical 21 Reader\",\"mf\":\"Kamstrup\",\"mdl\":\"Multical 21\"}}";
+  mqttClient.publish(discoveryTopic.c_str(), payload.c_str(), true);
+}
+
+static void publishHomeAssistantDiscovery() {
+  if (!mqttClient.connected() || !appConfig.data().homeAssistantDiscovery || haDiscoveryPublished) {
+    return;
+  }
+
+  publishHaSensor("total", "Water total", "m3", "water", "total_increasing", "{{ value_json.total_m3 }}");
+  publishHaSensor("today", "Water today", "m3", "water", "measurement", "{{ value_json.today_m3 }}");
+  publishHaSensor("last_24h", "Water last 24h", "m3", "water", "measurement", "{{ value_json.last_24h_m3 }}");
+  publishHaSensor("month", "Water month", "m3", "water", "measurement", "{{ value_json.month_usage_m3 }}");
+  publishHaSensor("water_temp", "Water temperature", "C", "temperature", "measurement", "{{ value_json.water_temperature_c }}");
+  publishHaSensor("ambient_temp", "Ambient temperature", "C", "temperature", "measurement", "{{ value_json.ambient_temperature_c }}");
+  publishHaSensor("last_frame_age", "Water last frame age", "s", "duration", "measurement", "{{ value_json.last_frame_age_s }}");
+  publishHaBinarySensor("alarm_burst", "Water alarm burst", "{{ 'true' if value_json.alarms.burst else 'false' }}");
+  publishHaBinarySensor("alarm_leak", "Water alarm leak", "{{ 'true' if value_json.alarms.leak else 'false' }}");
+  publishHaBinarySensor("alarm_dry", "Water alarm dry", "{{ 'true' if value_json.alarms.dry else 'false' }}");
+  publishHaBinarySensor("alarm_reverse", "Water alarm reverse", "{{ 'true' if value_json.alarms.reverse else 'false' }}");
+  haDiscoveryPublished = true;
+  Serial.println("Home Assistant discovery published");
 }
 
 static void publishWaterData() {
@@ -286,6 +387,7 @@ void loop() {
       mqttConnect();
     }
     mqttClient.loop();
+    publishHomeAssistantDiscovery();
 
     if (waterData.valid && millis() - lastMqttPublish > 60000) {
       publishWaterData();
