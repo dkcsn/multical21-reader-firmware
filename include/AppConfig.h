@@ -5,6 +5,7 @@
 
 struct AppConfigData {
   uint32_t magic;
+  char deviceName[33];
   char wifiSsid[33];
   char wifiPassword[65];
   bool ntpEnabled;
@@ -39,9 +40,11 @@ public:
   bool hasMqtt() const;
   bool hasMeter() const;
 
+  bool setDeviceName(const String& value);
   bool setMeterSerialHex(const String& value);
   bool setEncryptionKeyHex(const String& value);
 
+  String deviceName() const;
   String meterSerialHex() const;
   String encryptionKeyHex() const;
   String maskedWifiPassword() const;

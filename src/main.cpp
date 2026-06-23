@@ -30,9 +30,6 @@
 #include "WaterMeter.h"
 #include "hwconfig.h"
 
-#define ESP_NAME "Multical21Reader"
-#define SETUP_AP_NAME "Multical21-Setup"
-
 #if defined(ESP32)
   #define LED_BUILTIN 4
 #endif
@@ -83,6 +80,23 @@ static String topic(const char* suffix) {
 
 static String haNodeId() {
   return String("multical21_") + chipIdHex();
+}
+
+static String setupApName() {
+  String name = appConfig.deviceName() + "-Setup";
+  if (name.length() > 31) {
+    name = name.substring(0, 31);
+  }
+  return name;
+}
+
+static void applyWifiHostname() {
+  String name = appConfig.deviceName();
+#if defined(ESP8266)
+  WiFi.hostname(name.c_str());
+#else
+  WiFi.setHostname(name.c_str());
+#endif
 }
 
 static String discoveryPrefix() {
@@ -143,6 +157,7 @@ static bool connectWifi() {
   }
 
   WiFi.mode(WIFI_STA);
+  applyWifiHostname();
   WiFi.begin(appConfig.data().wifiSsid, appConfig.data().wifiPassword);
   Debug.print("Connecting to WiFi ");
   Debug.println(appConfig.data().wifiSsid);
@@ -164,16 +179,18 @@ static bool connectWifi() {
 static void startSetupAp() {
   setupApMode = true;
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(SETUP_AP_NAME);
+  applyWifiHostname();
+  String apName = setupApName();
+  WiFi.softAP(apName.c_str());
   dnsServer.start(53, "*", WiFi.softAPIP());
   Debug.print("Setup AP started: ");
-  Debug.print(SETUP_AP_NAME);
+  Debug.print(apName);
   Debug.print(" at ");
   Debug.println(WiFi.softAPIP().toString());
 }
 
 static void setupOTA() {
-  ArduinoOTA.setHostname(ESP_NAME);
+  ArduinoOTA.setHostname(appConfig.deviceName().c_str());
   ArduinoOTA.onStart([]() {
     Debug.println("OTA update started");
   });
@@ -206,7 +223,7 @@ static bool mqttConnect() {
   }
   mqttClient.setServer(appConfig.data().mqttHost, appConfig.data().mqttPort);
   mqttClient.setBufferSize(768);
-  String clientId = String(ESP_NAME) + "-" + chipIdHex();
+  String clientId = appConfig.deviceName() + "-" + chipIdHex();
   String onlineTopic = topic("online");
 
   bool connected;
@@ -390,7 +407,14 @@ void setup() {
   } else {
     setupNtp();
     setupOTA();
-    MDNS.begin(ESP_NAME);
+    if (MDNS.begin(appConfig.deviceName().c_str())) {
+      MDNS.addService("http", "tcp", 80);
+      Debug.print("mDNS started: http://");
+      Debug.print(appConfig.deviceName());
+      Debug.println(".local");
+    } else {
+      Debug.println("mDNS start failed");
+    }
   }
 
   webServer.begin();
@@ -404,6 +428,9 @@ void loop() {
     dnsServer.processNextRequest();
   } else {
     ArduinoOTA.handle();
+#if defined(ESP8266)
+    MDNS.update();
+#endif
   }
 
   webServer.handleClient();

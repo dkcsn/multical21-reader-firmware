@@ -1,12 +1,13 @@
 #include "AppConfig.h"
 #include <EEPROM.h>
 
-static const uint32_t CONFIG_MAGIC = 0x4D433234;
-static const uint32_t LEGACY_CONFIG_MAGIC = 0x4D433233;
+static const uint32_t CONFIG_MAGIC = 0x4D433235;
+static const uint32_t CONFIG_MAGIC_V4 = 0x4D433234;
+static const uint32_t CONFIG_MAGIC_V3 = 0x4D433233;
 static const size_t EEPROM_SIZE = 1024;
 static const int EEPROM_ADDRESS = 0;
 
-struct LegacyAppConfigData {
+struct AppConfigDataV3 {
   uint32_t magic;
   char wifiSsid[33];
   char wifiPassword[65];
@@ -17,6 +18,28 @@ struct LegacyAppConfigData {
   bool mqttRetain;
   bool mqttSecure;
   bool homeAssistantDiscovery;
+  char homeAssistantPrefix[65];
+  char mqttHost[129];
+  uint16_t mqttPort;
+  char mqttUsername[65];
+  char mqttPassword[65];
+  char mqttBaseTopic[65];
+  uint8_t meterId[4];
+  uint8_t encryptionKey[16];
+};
+
+struct AppConfigDataV4 {
+  uint32_t magic;
+  char wifiSsid[33];
+  char wifiPassword[65];
+  bool ntpEnabled;
+  char ntpServer[65];
+  int16_t timezoneOffsetMinutes;
+  bool mqttEnabled;
+  bool mqttRetain;
+  bool mqttSecure;
+  bool homeAssistantDiscovery;
+  bool telnetDebugEnabled;
   char homeAssistantPrefix[65];
   char mqttHost[129];
   uint16_t mqttPort;
@@ -69,6 +92,30 @@ static String toHexString(const uint8_t* data, size_t len) {
   return out;
 }
 
+static String normalizeDeviceName(const String& input) {
+  String name = input;
+  name.trim();
+  name.toLowerCase();
+  String out;
+  out.reserve(32);
+  bool lastDash = false;
+  for (uint16_t i = 0; i < name.length() && out.length() < 32; i++) {
+    char c = name[i];
+    bool allowed = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+    if (allowed) {
+      out += c;
+      lastDash = false;
+    } else if ((c == '-' || c == '_' || c == ' ') && out.length() > 0 && !lastDash) {
+      out += '-';
+      lastDash = true;
+    }
+  }
+  while (out.endsWith("-")) {
+    out.remove(out.length() - 1);
+  }
+  return out.length() > 0 ? out : String("multical21");
+}
+
 bool AppConfig::begin() {
   EEPROM.begin(EEPROM_SIZE);
   return load();
@@ -76,8 +123,8 @@ bool AppConfig::begin() {
 
 bool AppConfig::load() {
   EEPROM.get(EEPROM_ADDRESS, config);
-  if (config.magic == LEGACY_CONFIG_MAGIC) {
-    LegacyAppConfigData legacy;
+  if (config.magic == CONFIG_MAGIC_V3) {
+    AppConfigDataV3 legacy;
     EEPROM.get(EEPROM_ADDRESS, legacy);
     setDefaults();
     memcpy(config.wifiSsid, legacy.wifiSsid, sizeof(config.wifiSsid));
@@ -99,11 +146,35 @@ bool AppConfig::load() {
     memcpy(config.encryptionKey, legacy.encryptionKey, sizeof(config.encryptionKey));
     config.telnetDebugEnabled = false;
     save();
+  } else if (config.magic == CONFIG_MAGIC_V4) {
+    AppConfigDataV4 legacy;
+    EEPROM.get(EEPROM_ADDRESS, legacy);
+    setDefaults();
+    memcpy(config.wifiSsid, legacy.wifiSsid, sizeof(config.wifiSsid));
+    memcpy(config.wifiPassword, legacy.wifiPassword, sizeof(config.wifiPassword));
+    config.ntpEnabled = legacy.ntpEnabled;
+    memcpy(config.ntpServer, legacy.ntpServer, sizeof(config.ntpServer));
+    config.timezoneOffsetMinutes = legacy.timezoneOffsetMinutes;
+    config.mqttEnabled = legacy.mqttEnabled;
+    config.mqttRetain = legacy.mqttRetain;
+    config.mqttSecure = legacy.mqttSecure;
+    config.homeAssistantDiscovery = legacy.homeAssistantDiscovery;
+    config.telnetDebugEnabled = legacy.telnetDebugEnabled;
+    memcpy(config.homeAssistantPrefix, legacy.homeAssistantPrefix, sizeof(config.homeAssistantPrefix));
+    memcpy(config.mqttHost, legacy.mqttHost, sizeof(config.mqttHost));
+    config.mqttPort = legacy.mqttPort;
+    memcpy(config.mqttUsername, legacy.mqttUsername, sizeof(config.mqttUsername));
+    memcpy(config.mqttPassword, legacy.mqttPassword, sizeof(config.mqttPassword));
+    memcpy(config.mqttBaseTopic, legacy.mqttBaseTopic, sizeof(config.mqttBaseTopic));
+    memcpy(config.meterId, legacy.meterId, sizeof(config.meterId));
+    memcpy(config.encryptionKey, legacy.encryptionKey, sizeof(config.encryptionKey));
+    save();
   } else if (config.magic != CONFIG_MAGIC) {
     setDefaults();
     save();
     return false;
   }
+  config.deviceName[sizeof(config.deviceName) - 1] = '\0';
   config.wifiSsid[sizeof(config.wifiSsid) - 1] = '\0';
   config.wifiPassword[sizeof(config.wifiPassword) - 1] = '\0';
   config.ntpServer[sizeof(config.ntpServer) - 1] = '\0';
@@ -122,6 +193,12 @@ bool AppConfig::load() {
   if (strlen(config.homeAssistantPrefix) == 0) {
     strncpy(config.homeAssistantPrefix, "homeassistant", sizeof(config.homeAssistantPrefix) - 1);
     config.homeAssistantPrefix[sizeof(config.homeAssistantPrefix) - 1] = '\0';
+  }
+  if (strlen(config.deviceName) == 0) {
+    strncpy(config.deviceName, "multical21", sizeof(config.deviceName) - 1);
+    config.deviceName[sizeof(config.deviceName) - 1] = '\0';
+  } else {
+    setDeviceName(config.deviceName);
   }
   return true;
 }
@@ -165,6 +242,13 @@ bool AppConfig::hasMeter() const {
   return hasId && hasKey;
 }
 
+bool AppConfig::setDeviceName(const String& value) {
+  String normalized = normalizeDeviceName(value);
+  strncpy(config.deviceName, normalized.c_str(), sizeof(config.deviceName) - 1);
+  config.deviceName[sizeof(config.deviceName) - 1] = '\0';
+  return true;
+}
+
 bool AppConfig::setMeterSerialHex(const String& value) {
   return parseHexBytes(config.meterId, sizeof(config.meterId), value);
 }
@@ -175,6 +259,10 @@ bool AppConfig::setEncryptionKeyHex(const String& value) {
 
 String AppConfig::meterSerialHex() const {
   return toHexString(config.meterId, sizeof(config.meterId));
+}
+
+String AppConfig::deviceName() const {
+  return normalizeDeviceName(config.deviceName);
 }
 
 String AppConfig::encryptionKeyHex() const {
@@ -192,6 +280,7 @@ String AppConfig::maskedMqttPassword() const {
 void AppConfig::setDefaults() {
   memset(&config, 0, sizeof(config));
   config.magic = CONFIG_MAGIC;
+  strncpy(config.deviceName, "multical21", sizeof(config.deviceName) - 1);
   config.ntpEnabled = true;
   strncpy(config.ntpServer, "pool.ntp.org", sizeof(config.ntpServer) - 1);
   config.timezoneOffsetMinutes = 60;

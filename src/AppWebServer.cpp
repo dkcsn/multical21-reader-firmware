@@ -331,12 +331,18 @@ static String buildSetupSection(AppConfig& config, bool onboardingMode) {
   out += F("</h2><span>");
   out += onboardingMode ? F("Setup AP") : F("Settings");
   out += F("</span></div><form class=\"setupForm\" method=\"post\" action=\"/save\">");
-  out += F("<div class=\"formSection\"><h3>WiFi</h3><div class=\"formGrid\"><label>WiFi SSID<input id=\"wifiSsid\" name=\"wifiSsid\" value=\"");
+  out += F("<div class=\"formSection\"><h3>WiFi</h3><div class=\"formGrid\"><label>Device name<input name=\"deviceName\" value=\"");
+  out += htmlEscape(config.deviceName());
+  out += F("\" maxlength=\"32\"></label>");
+  out += F("<label>WiFi SSID<input id=\"wifiSsid\" name=\"wifiSsid\" value=\"");
   out += htmlEscape(cfg.wifiSsid);
   out += F("\"></label>");
   out += F("<label>WiFi password<input id=\"wifiPassword\" name=\"wifiPassword\" type=\"password\" placeholder=\"");
   out += htmlEscape(config.maskedWifiPassword());
   out += F("\"></label>");
+  out += F("<div class=\"statusLine\"><span>Local address</span><strong>http://");
+  out += htmlEscape(config.deviceName());
+  out += F(".local</strong><small>Reboot after save to apply hostname and mDNS changes</small></div>");
   out += F("</div><div class=\"wifiActions\"><button type=\"button\" onclick=\"scanWifi()\">Scan WiFi</button><button type=\"button\" onclick=\"testWifi()\">Test WiFi</button><span id=\"wifiResult\"></span></div><div id=\"wifiList\" class=\"wifiList\"></div></div>");
   out += F("<div class=\"formSection\"><h3>Time</h3><div class=\"formGrid\"><label>NTP enabled<select name=\"ntpEnabled\"><option value=\"1\"");
   out += cfg.ntpEnabled ? F(" selected") : F("");
@@ -496,7 +502,9 @@ void AppWebServer::handleRoot() {
   body += F("</section>");
 
   body += F("<section><h2>Local API</h2><dl>");
-  body += F("<dt>State JSON</dt><dd><code>http://");
+  body += F("<dt>Local name</dt><dd><code>http://");
+  body += htmlEscape(config.deviceName());
+  body += F(".local</code></dd><dt>State JSON</dt><dd><code>http://");
   body += htmlEscape(deviceIp);
   body += F("/data.json</code></dd><dt>Hourly plot</dt><dd><code>/dayplot.json</code></dd><dt>Daily plot</dt><dd><code>/monthplot.json</code></dd>");
   body += F("<dt>Sync rule</dt><dd>Use total_m3 as source of truth and treat data as stale when last_frame_age_s is high.</dd></dl></section>");
@@ -611,7 +619,9 @@ void AppWebServer::handleConfigJson() {
   const AppConfigData& cfg = config.data();
   String json;
   json.reserve(700);
-  json += F("{\"wifiSsid\":\"");
+  json += F("{\"deviceName\":\"");
+  json += jsonEscape(config.deviceName());
+  json += F("\",\"wifiSsid\":\"");
   json += cfg.wifiSsid;
   json += F("\",\"wifiPassword\":\"");
   json += config.maskedWifiPassword();
@@ -827,6 +837,7 @@ void AppWebServer::handleCaptiveRedirect() {
 void AppWebServer::handleSave() {
   AppConfigData& cfg = config.data();
 
+  config.setDeviceName(server.arg("deviceName"));
   copyArg(cfg.wifiSsid, sizeof(cfg.wifiSsid), server.arg("wifiSsid"));
   String wifiPassword = server.arg("wifiPassword");
   if (wifiPassword.length() > 0 && wifiPassword != "***") {
