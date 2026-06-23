@@ -177,6 +177,9 @@
 #define CC1101_DEFVAL_PKTLEN     0x30        // Packet Length
 #define CC1101_DEFVAL_FIFOTHR    0x00        // RX 4 bytes and TX 61 bytes Thresholds
 
+#define RADIO_HEALTH_INTERVAL_MS 10000UL
+#define RADIO_RECEIVE_TIMEOUT_MS 300000UL
+
 class WaterMeter
 {
   private:
@@ -211,8 +214,17 @@ class WaterMeter
     // reset cc1101
     void reset(void);
 
+    // fully reset and reconfigure the receiver
+    void restartRadio(void);
+
+    // periodic radio health check and recovery
+    void checkRadioHealth(void);
+
     // receive a wmbus frame 
     void receive(WMBusFrame *payload, WaterData& waterData);
+
+    unsigned long lastHealthCheckMillis = 0;
+    unsigned long lastFrameReceivedMillis = 0;
     
   public:
 

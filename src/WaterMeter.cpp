@@ -13,7 +13,11 @@
 */
 
 #include "WaterMeter.h"
+#include "DebugLog.h"
 #include "hwconfig.h"
+
+volatile boolean packetAvailable = false;
+void IRAM_ATTR GD0_ISR(void);
 
 WaterMeter::WaterMeter()
 {
@@ -115,16 +119,74 @@ void WaterMeter::reset(void)
 // set IDLE state, flush FIFO and (re)start receiver
 void WaterMeter::startReceiver(void)
 {
+  uint8_t attempts = 0;
   cmdStrobe(CC1101_SIDLE);      // Enter IDLE state
   while (readReg(CC1101_MARCSTATE, CC1101_STATUS_REGISTER) != MARCSTATE_IDLE) {
+    if (++attempts > 100) {
+      Debug.println("CC1101 failed to enter IDLE");
+      return;
+    }
     delay(1);
   }
   
   cmdStrobe(CC1101_SFRX);              // flush receive queue
+  delay(2);
 
+  attempts = 0;
   cmdStrobe(CC1101_SRX);               // Enter RX state
   while (readReg(CC1101_MARCSTATE, CC1101_STATUS_REGISTER) != MARCSTATE_RX) {
+    if (++attempts > 100) {
+      Debug.println("CC1101 failed to enter RX");
+      return;
+    }
     delay(1);
+  }
+}
+
+void WaterMeter::restartRadio(void)
+{
+  Debug.println("Restarting CC1101 receiver");
+  detachInterrupt(digitalPinToInterrupt(CC1101_GDO0));
+  reset();
+  initializeRegisters();
+  cmdStrobe(CC1101_SCAL);
+  delay(1);
+  packetAvailable = false;
+  startReceiver();
+  lastHealthCheckMillis = millis();
+  attachInterrupt(digitalPinToInterrupt(CC1101_GDO0), GD0_ISR, FALLING);
+}
+
+void WaterMeter::checkRadioHealth(void)
+{
+  if (millis() - lastHealthCheckMillis < RADIO_HEALTH_INTERVAL_MS) {
+    return;
+  }
+  lastHealthCheckMillis = millis();
+
+  uint8_t marcState = readReg(CC1101_MARCSTATE, CC1101_STATUS_REGISTER);
+  uint8_t rxBytes = readReg(CC1101_RXBYTES, CC1101_STATUS_REGISTER);
+  uint8_t rssi = readReg(CC1101_RSSI, CC1101_STATUS_REGISTER);
+  int16_t rssiDbm = rssi >= 128 ? ((int16_t) rssi - 256) / 2 - 74 : rssi / 2 - 74;
+
+  Debug.printf("CC1101 health: MARC 0x%02X, RX bytes %u, RSSI %d dBm\n\r",
+               marcState, rxBytes & 0x7F, rssiDbm);
+
+  if ((rxBytes & 0x80) != 0 || marcState == MARCSTATE_RXFIFO_OVERFLOW) {
+    Debug.println("CC1101 RX FIFO overflow");
+    restartRadio();
+    return;
+  }
+
+  if (marcState != MARCSTATE_RX) {
+    Debug.printf("CC1101 not in RX state: 0x%02X\n\r", marcState);
+    restartRadio();
+    return;
+  }
+
+  if (lastFrameReceivedMillis > 0 && millis() - lastFrameReceivedMillis > RADIO_RECEIVE_TIMEOUT_MS) {
+    Debug.println("CC1101 receive timeout");
+    restartRadio();
   }
 }
 
@@ -171,9 +233,6 @@ void WaterMeter::initializeRegisters(void)
   writeReg(CC1101_TEST0, CC1101_DEFVAL_TEST0);
 }
 
-volatile boolean packetAvailable = false;
-void IRAM_ATTR GD0_ISR(void);
-
 // handle interrupt from CC1101 via GDO0
 void GD0_ISR(void) {
   // set the flag that a package is available
@@ -184,6 +243,8 @@ void GD0_ISR(void) {
 // does the frame checking and decryption
 bool WaterMeter::readFrame(WaterData& waterData, const AppConfigData& config)
 {
+  checkRadioHealth();
+
   if (packetAvailable)
   {
     //Serial.println("packet received");
@@ -199,6 +260,9 @@ bool WaterMeter::readFrame(WaterData& waterData, const AppConfigData& config)
 
     // Enable wireless reception interrupt
     attachInterrupt(digitalPinToInterrupt(CC1101_GDO0), GD0_ISR, FALLING);
+    if (frame.isValid) {
+      lastFrameReceivedMillis = millis();
+    }
     return frame.isValid;
   }
   return false;
@@ -221,6 +285,8 @@ void WaterMeter::begin()
 
   attachInterrupt(digitalPinToInterrupt(CC1101_GDO0), GD0_ISR, FALLING);
   startReceiver();
+  lastHealthCheckMillis = millis();
+  lastFrameReceivedMillis = millis();
 }
 
 // reads a single byte from the RX fifo
