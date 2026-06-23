@@ -23,6 +23,24 @@ WaterMeter::WaterMeter()
 {
 }
 
+static int16_t rssiToDbm(uint8_t rssi)
+{
+  return rssi >= 128 ? ((int16_t) rssi - 256) / 2 - 74 : rssi / 2 - 74;
+}
+
+static void debugHexPrefix(const char* label, const uint8_t* data, uint8_t len, uint8_t maxLen)
+{
+  Debug.print(label);
+  Debug.print(" ");
+  for (uint8_t i = 0; i < len && i < maxLen; i++) {
+    Debug.printf("%02X", data[i]);
+  }
+  if (len > maxLen) {
+    Debug.print("...");
+  }
+  Debug.println();
+}
+
 // ChipSelect assert
 inline void WaterMeter::selectCC1101(void)
 {
@@ -151,6 +169,7 @@ void WaterMeter::restartRadio(void)
   initializeRegisters();
   cmdStrobe(CC1101_SCAL);
   delay(1);
+  logRadioIdentity();
   packetAvailable = false;
   startReceiver();
   lastHealthCheckMillis = millis();
@@ -167,10 +186,9 @@ void WaterMeter::checkRadioHealth(void)
   uint8_t marcState = readReg(CC1101_MARCSTATE, CC1101_STATUS_REGISTER);
   uint8_t rxBytes = readReg(CC1101_RXBYTES, CC1101_STATUS_REGISTER);
   uint8_t rssi = readReg(CC1101_RSSI, CC1101_STATUS_REGISTER);
-  int16_t rssiDbm = rssi >= 128 ? ((int16_t) rssi - 256) / 2 - 74 : rssi / 2 - 74;
 
   Debug.printf("CC1101 health: MARC 0x%02X, RX bytes %u, RSSI %d dBm\n\r",
-               marcState, rxBytes & 0x7F, rssiDbm);
+               marcState, rxBytes & 0x7F, rssiToDbm(rssi));
 
   if ((rxBytes & 0x80) != 0 || marcState == MARCSTATE_RXFIFO_OVERFLOW) {
     Debug.println("CC1101 RX FIFO overflow");
@@ -233,6 +251,16 @@ void WaterMeter::initializeRegisters(void)
   writeReg(CC1101_TEST0, CC1101_DEFVAL_TEST0);
 }
 
+void WaterMeter::logRadioIdentity(void)
+{
+  uint8_t partnum = readReg(CC1101_PARTNUM, CC1101_STATUS_REGISTER);
+  uint8_t version = readReg(CC1101_VERSION, CC1101_STATUS_REGISTER);
+  uint8_t marcState = readReg(CC1101_MARCSTATE, CC1101_STATUS_REGISTER);
+  uint8_t pktStatus = readReg(CC1101_PKTSTATUS, CC1101_STATUS_REGISTER);
+  Debug.printf("CC1101 identity: PARTNUM 0x%02X VERSION 0x%02X MARC 0x%02X PKTSTATUS 0x%02X\n\r",
+               partnum, version, marcState, pktStatus);
+}
+
 // handle interrupt from CC1101 via GDO0
 void GD0_ISR(void) {
   // set the flag that a package is available
@@ -247,7 +275,7 @@ bool WaterMeter::readFrame(WaterData& waterData, const AppConfigData& config)
 
   if (packetAvailable)
   {
-    //Serial.println("packet received");
+    Debug.println("CC1101 packet interrupt");
     // Disable wireless reception interrupt
     detachInterrupt(digitalPinToInterrupt(CC1101_GDO0));
  
@@ -262,6 +290,9 @@ bool WaterMeter::readFrame(WaterData& waterData, const AppConfigData& config)
     attachInterrupt(digitalPinToInterrupt(CC1101_GDO0), GD0_ISR, FALLING);
     if (frame.isValid) {
       lastFrameReceivedMillis = millis();
+      Debug.println("WMBus frame accepted");
+    } else {
+      Debug.println("WMBus frame rejected");
     }
     return frame.isValid;
   }
@@ -282,6 +313,7 @@ void WaterMeter::begin()
 
   cmdStrobe(CC1101_SCAL);
   delay(1);
+  logRadioIdentity();
 
   attachInterrupt(digitalPinToInterrupt(CC1101_GDO0), GD0_ISR, FALLING);
   startReceiver();
@@ -298,12 +330,17 @@ uint8_t WaterMeter::readByteFromFifo(void)
 // handles a received frame and restart the CC1101 receiver
 void WaterMeter::receive(WMBusFrame * frame, WaterData& waterData)
 {
+  uint8_t rxBytesBefore = readReg(CC1101_RXBYTES, CC1101_STATUS_REGISTER);
+  Debug.printf("CC1101 RX FIFO before read: %u bytes%s\n\r",
+               rxBytesBefore & 0x7F, (rxBytesBefore & 0x80) ? " overflow" : "");
+
   // read preamble, should be 0x543D
   uint8_t p1 = readByteFromFifo();
   uint8_t p2 = readByteFromFifo();
   //Serial.printf("%02x%02x", p1, p2);
 
   uint8_t payloadLength = readByteFromFifo();
+  Debug.printf("WMBus raw header: preamble 0x%02X%02X length %u\n\r", p1, p2, payloadLength);
 
   // is it Mode C1, frame B and does it fit in the buffer
   if ( (payloadLength < WMBusFrame::MAX_LENGTH )
@@ -319,9 +356,17 @@ void WaterMeter::receive(WMBusFrame * frame, WaterData& waterData)
     {
 	    frame->payload[i] = readByteFromFifo();
     }
+    debugHexPrefix("WMBus payload prefix:", frame->payload, payloadLength, 24);
 
     // do some checks: my meterId, crc ok
     frame->decode(waterData);
+  } else {
+    if (p1 != 0x54 || p2 != 0x3D) {
+      Debug.println("WMBus rejected before decode: unexpected preamble");
+    }
+    if (payloadLength >= WMBusFrame::MAX_LENGTH) {
+      Debug.println("WMBus rejected before decode: payload too long");
+    }
   }
 
   // flush RX fifo and restart receiver

@@ -18,6 +18,19 @@
 
 #define CRC16_EN_13757 0x3D65
 
+static void debugHexBytes(const char* label, const uint8_t* data, size_t len, size_t maxLen)
+{
+  Debug.print(label);
+  Debug.print(" ");
+  for (size_t i = 0; i < len && i < maxLen; i++) {
+    Debug.printf("%02X", data[i]);
+  }
+  if (len > maxLen) {
+    Debug.print("...");
+  }
+  Debug.println();
+}
+
 WMBusFrame::WMBusFrame(const uint8_t meterId[4], const uint8_t key[16])
 {
   memcpy(this->meterId, meterId, sizeof(this->meterId));
@@ -30,11 +43,22 @@ WMBusFrame::WMBusFrame(const uint8_t meterId[4], const uint8_t key[16])
 
 void WMBusFrame::check()
 {
+    if (length < 18) {
+      Debug.printf("WMBus frame too short for encrypted Multical payload: %u bytes\n\r", length);
+      isValid = false;
+      return;
+    }
+
     // check meterId
     for (uint8_t i = 0; i< 4; i++)
     {
         if (meterId[i] != payload[6-i])
         {
+          Debug.printf("Meter serial mismatch at byte %u: expected 0x%02X got 0x%02X\n\r",
+                       i, meterId[i], payload[6-i]);
+          Debug.printf("Configured meter serial: %02X%02X%02X%02X, frame meter serial: %02X%02X%02X%02X\n\r",
+                       meterId[0], meterId[1], meterId[2], meterId[3],
+                       payload[6], payload[5], payload[4], payload[3]);
           isValid = false;
           return;
         }
@@ -205,8 +229,10 @@ void WMBusFrame::parseMeterInfo(uint8_t *data, size_t len, WaterData& waterData)
 
   if (!validatePlaintextCrc(data, len)) {
     isValid = false;
+    Debug.println("Multical decrypt failed or wrong AES key: plaintext CRC invalid");
     return;
   }
+  Debug.println("Multical plaintext CRC OK");
 
   if (parseKamwaterDifVif(data + 2, len - 2, waterData)) {
     return;
@@ -263,15 +289,21 @@ void WMBusFrame::decode(WaterData& waterData)
 {
   // check meterId, CRC
   check();
-  if (!isValid) return;
+  if (!isValid) {
+    Debug.println("WMBus check failed before decrypt");
+    return;
+  }
 
   uint8_t cipherLength = length - 2 - 16; // cipher starts at index 16, remove 2 crc bytes
+  Debug.printf("WMBus decrypt: payload length %u, cipher length %u\n\r", length, cipherLength);
   memcpy(cipher, &payload[16], cipherLength);
 
   memset(iv, 0, sizeof(iv));   // padding with 0
   memcpy(iv, &payload[1], 8);
   iv[8] = payload[10];
   memcpy(&iv[9], &payload[12], 4);
+  debugHexBytes("WMBus AES IV:", iv, sizeof(iv), sizeof(iv));
+  debugHexBytes("WMBus cipher prefix:", cipher, cipherLength, 24);
 
 #if defined(ESP32)
   mbedtls_aes_context ctx;
@@ -285,6 +317,8 @@ void WMBusFrame::decode(WaterData& waterData)
   aes128.setIV(iv, sizeof(iv));
   aes128.decrypt(plaintext, (const uint8_t *) cipher, cipherLength);
 #endif
+
+  debugHexBytes("WMBus plaintext prefix:", plaintext, cipherLength, 32);
 
 /*
   Serial.printf("C:     ");

@@ -220,6 +220,9 @@ class WaterMeter
     // periodic radio health check and recovery
     void checkRadioHealth(void);
 
+    // log cc1101 identity and state
+    void logRadioIdentity(void);
+
     // receive a wmbus frame 
     void receive(WMBusFrame *payload, WaterData& waterData);
 
