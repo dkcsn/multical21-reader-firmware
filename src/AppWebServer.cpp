@@ -15,6 +15,25 @@ static String htmlEscape(const String& value) {
   return out;
 }
 
+static String jsonEscape(const String& value) {
+  String out;
+  out.reserve(value.length() + 8);
+  for (uint16_t i = 0; i < value.length(); i++) {
+    char c = value[i];
+    if (c == '"' || c == '\\') {
+      out += '\\';
+      out += c;
+    } else if (c == '\n') {
+      out += "\\n";
+    } else if (c == '\r') {
+      out += "\\r";
+    } else if ((uint8_t) c >= 0x20) {
+      out += c;
+    }
+  }
+  return out;
+}
+
 static void copyArg(char* dest, size_t len, const String& value) {
   String trimmed = value;
   trimmed.trim();
@@ -54,6 +73,14 @@ static String graphBars(WaterHistory& history, bool days) {
   return out;
 }
 
+static bool isOpenNetwork(uint8_t index) {
+#if defined(ESP8266)
+  return WiFi.encryptionType(index) == ENC_TYPE_NONE;
+#else
+  return WiFi.encryptionType(index) == WIFI_AUTH_OPEN;
+#endif
+}
+
 AppWebServer::AppWebServer(AppConfig& config, WaterData& waterData, WaterHistory& history)
   : config(config), waterData(waterData), history(history), server(80) {
 }
@@ -64,6 +91,14 @@ void AppWebServer::begin() {
   server.on("/data.json", HTTP_GET, std::bind(&AppWebServer::handleDataJson, this));
   server.on("/dayplot.json", HTTP_GET, std::bind(&AppWebServer::handleDayPlotJson, this));
   server.on("/monthplot.json", HTTP_GET, std::bind(&AppWebServer::handleMonthPlotJson, this));
+  server.on("/wifiscan.json", HTTP_GET, std::bind(&AppWebServer::handleWifiScanJson, this));
+  server.on("/wifitest.json", HTTP_POST, std::bind(&AppWebServer::handleWifiTestJson, this));
+  server.on("/generate_204", HTTP_GET, std::bind(&AppWebServer::handleCaptiveRedirect, this));
+  server.on("/hotspot-detect.html", HTTP_GET, std::bind(&AppWebServer::handleCaptiveRedirect, this));
+  server.on("/library/test/success.html", HTTP_GET, std::bind(&AppWebServer::handleCaptiveRedirect, this));
+  server.on("/connecttest.txt", HTTP_GET, std::bind(&AppWebServer::handleCaptiveRedirect, this));
+  server.on("/ncsi.txt", HTTP_GET, std::bind(&AppWebServer::handleCaptiveRedirect, this));
+  server.on("/fwlink", HTTP_GET, std::bind(&AppWebServer::handleCaptiveRedirect, this));
   server.on("/save", HTTP_POST, std::bind(&AppWebServer::handleSave, this));
   server.on("/reboot", HTTP_POST, std::bind(&AppWebServer::handleReboot, this));
   server.onNotFound(std::bind(&AppWebServer::handleRoot, this));
@@ -114,12 +149,13 @@ void AppWebServer::handleRoot() {
   body += F("<dt>Sync rule</dt><dd>Use total_m3 as source of truth and treat data as stale when last_frame_age_s is high.</dd></dl></section>");
 
   body += F("<section><h2>Setup</h2><form method=\"post\" action=\"/save\">");
-  body += F("<label>WiFi SSID<input name=\"wifiSsid\" value=\"");
+  body += F("<label>WiFi SSID<input id=\"wifiSsid\" name=\"wifiSsid\" value=\"");
   body += htmlEscape(cfg.wifiSsid);
   body += F("\"></label>");
-  body += F("<label>WiFi password<input name=\"wifiPassword\" type=\"password\" placeholder=\"");
+  body += F("<label>WiFi password<input id=\"wifiPassword\" name=\"wifiPassword\" type=\"password\" placeholder=\"");
   body += htmlEscape(config.maskedWifiPassword());
   body += F("\"></label>");
+  body += F("<div class=\"wifiActions\"><button type=\"button\" onclick=\"scanWifi()\">Scan WiFi</button><button type=\"button\" onclick=\"testWifi()\">Test WiFi</button><span id=\"wifiResult\"></span></div><div id=\"wifiList\" class=\"wifiList\"></div>");
   body += F("<label>NTP enabled<select name=\"ntpEnabled\"><option value=\"1\"");
   body += cfg.ntpEnabled ? F(" selected") : F("");
   body += F(">Enabled</option><option value=\"0\"");
@@ -289,6 +325,77 @@ void AppWebServer::handleMonthPlotJson() {
   server.send(200, "application/json", json);
 }
 
+void AppWebServer::handleWifiScanJson() {
+  if (WiFi.getMode() == WIFI_AP) {
+    WiFi.mode(WIFI_AP_STA);
+  }
+
+  int count = WiFi.scanNetworks();
+  String json;
+  json.reserve(256 + max(count, 0) * 96);
+  json += F("{\"networks\":[");
+  for (int i = 0; i < count; i++) {
+    if (i > 0) {
+      json += ",";
+    }
+    json += F("{\"ssid\":\"");
+    json += jsonEscape(WiFi.SSID(i));
+    json += F("\",\"rssi\":");
+    json += WiFi.RSSI(i);
+    json += F(",\"channel\":");
+    json += WiFi.channel(i);
+    json += F(",\"secure\":");
+    json += isOpenNetwork(i) ? F("false") : F("true");
+    json += F("}");
+  }
+  json += F("]}");
+  WiFi.scanDelete();
+  server.send(200, "application/json", json);
+}
+
+void AppWebServer::handleWifiTestJson() {
+  String ssid = server.arg("ssid");
+  String password = server.arg("password");
+  ssid.trim();
+
+  if (ssid.length() == 0) {
+    server.send(400, "application/json", "{\"ok\":false,\"message\":\"SSID is required\"}");
+    return;
+  }
+
+  if (WiFi.getMode() == WIFI_AP) {
+    WiFi.mode(WIFI_AP_STA);
+  }
+
+  WiFi.begin(ssid.c_str(), password.c_str());
+  unsigned long started = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - started < 12000) {
+    delay(250);
+  }
+
+  String json;
+  json.reserve(180);
+  json += F("{\"ok\":");
+  json += WiFi.status() == WL_CONNECTED ? F("true") : F("false");
+  json += F(",\"ssid\":\"");
+  json += jsonEscape(ssid);
+  json += F("\",\"status\":");
+  json += WiFi.status();
+  json += F(",\"ip\":\"");
+  json += WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : String("");
+  json += F("\"}");
+  server.send(200, "application/json", json);
+
+  if (WiFi.status() != WL_CONNECTED && strlen(config.data().wifiSsid) > 0) {
+    WiFi.begin(config.data().wifiSsid, config.data().wifiPassword);
+  }
+}
+
+void AppWebServer::handleCaptiveRedirect() {
+  server.sendHeader("Location", "/", true);
+  server.send(302, "text/plain", "Multical 21 Reader setup");
+}
+
 void AppWebServer::handleSave() {
   AppConfigData& cfg = config.data();
 
@@ -365,10 +472,14 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("dt{color:#52606d}dd{margin:0;font-weight:600}form{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}");
   html += F("code{font-size:12px;overflow-wrap:anywhere}label{display:grid;gap:5px;font-size:13px;color:#334e68}input,select{font:inherit;padding:10px;border:1px solid #bcccdc;border-radius:6px;background:white}");
   html += F("button{font:inherit;padding:10px 14px;border:0;border-radius:6px;background:#0b7285;color:white;font-weight:700;cursor:pointer;align-self:end}");
+  html += F(".wifiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.wifiActions span{font-size:13px;color:#334e68}.wifiList{grid-column:1/-1;display:grid;gap:6px}.wifiNet{display:flex;justify-content:space-between;gap:10px;border:1px solid #d9e2ec;border-radius:6px;padding:8px;background:#f8fafc;cursor:pointer}.wifiNet small{color:#52606d}");
   html += F(".bars{height:170px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden}");
   html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0;min-height:1px}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
   html += F("</style></head><body><header><h1>Multical 21 Reader</h1></header><main>");
   html += body;
-  html += F("</main></body></html>");
+  html += F("</main><script>");
+  html += F("async function scanWifi(){const r=document.getElementById('wifiResult'),l=document.getElementById('wifiList');r.textContent='Scanning...';l.innerHTML='';try{const j=await (await fetch('/wifiscan.json')).json();r.textContent=j.networks.length+' networks';j.networks.forEach(n=>{const d=document.createElement('div');d.className='wifiNet';d.innerHTML='<strong></strong><small></small>';d.querySelector('strong').textContent=n.ssid||'(hidden)';d.querySelector('small').textContent=n.rssi+' dBm ch '+n.channel+(n.secure?' secure':' open');d.onclick=()=>{document.getElementById('wifiSsid').value=n.ssid};l.appendChild(d)})}catch(e){r.textContent='Scan failed'}}");
+  html += F("async function testWifi(){const r=document.getElementById('wifiResult');r.textContent='Testing...';const body=new URLSearchParams({ssid:document.getElementById('wifiSsid').value,password:document.getElementById('wifiPassword').value});try{const j=await (await fetch('/wifitest.json',{method:'POST',body})).json();r.textContent=j.ok?'Connected: '+j.ip:'Failed, status '+j.status}catch(e){r.textContent='Test failed'}}");
+  html += F("</script></body></html>");
   server.send(200, "text/html", html);
 }

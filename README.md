@@ -15,6 +15,9 @@ Current firmware baseline:
 - Builds for ESP32 and ESP8266 with PlatformIO.
 - Starts a setup access point named `Multical21-Setup` when WiFi is not
   configured or cannot connect.
+- Provides captive portal redirects for common Android, iOS, Windows, and
+  browser connectivity checks.
+- Supports WiFi scan and WiFi credential test from the setup UI.
 - Serves a small browser UI on port 80 for WiFi, MQTT, meter serial, and AES key
   setup.
 - Stores configuration in EEPROM instead of requiring a local `credentials.h`.
@@ -36,8 +39,8 @@ First boot:
 
 1. Flash the firmware.
 2. Join the WiFi network `Multical21-Setup`.
-3. Open `http://192.168.4.1/`.
-4. Enter WiFi, MQTT, meter serial as 8 hex characters, and AES key as 32 hex
+3. Open the captive portal prompt, or browse to `http://192.168.4.1/`.
+4. Scan/test WiFi, then enter MQTT, meter serial as 8 hex characters, and AES key as 32 hex
    characters.
 5. Save and reboot.
 

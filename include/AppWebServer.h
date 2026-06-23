@@ -31,6 +31,9 @@ private:
   void handleDataJson();
   void handleDayPlotJson();
   void handleMonthPlotJson();
+  void handleWifiScanJson();
+  void handleWifiTestJson();
+  void handleCaptiveRedirect();
   void handleSave();
   void handleReboot();
   void sendHtml(const String& body);
