@@ -267,9 +267,13 @@ void AppWebServer::handleRoot() {
   body += htmlEscape(cfg.ntpServer);
   body += F("</small></article>");
 
-  body += F("<article class=\"card accentTools\"><div class=\"cardTop\"><span>Tools</span><b class=\"chip ");
-  body += cfg.telnetDebugEnabled ? F("ok\">Telnet") : F("off\">Telnet off");
-  body += F("</b></div><strong><a href=\"/firmware\">Firmware</a></strong><small>Browser OTA and debug port 23</small></article>");
+  body += F("<article class=\"card accentMeter\"><div class=\"cardTop\"><span>Meter</span><b class=\"chip ");
+  body += config.hasMeter() ? F("ok\">Configured") : F("warn\">Missing");
+  body += F("</b></div><strong>");
+  body += waterData.valid ? String(waterData.waterTemperatureC) + String(" C") : String("--");
+  body += F("</strong><small>Water temp, room ");
+  body += waterData.valid ? String(waterData.ambientTemperatureC) + String(" C") : String("--");
+  body += F("</small></article>");
 
   body += F("<article class=\"card accentVersion\"><div class=\"cardTop\"><span>Version</span><b class=\"chip ok\">");
   body += htmlEscape(firmwareBoardName());
@@ -282,21 +286,6 @@ void AppWebServer::handleRoot() {
   body += F("</small></article>");
   body += F("</section>");
 
-  body += F("<section><h2>Meter details</h2><dl>");
-  body += F("<dt>Meter configured</dt><dd>");
-  body += config.hasMeter() ? F("Yes") : F("No");
-  body += F("</dd><dt>Water temp</dt><dd>");
-  body += waterData.valid ? String(waterData.waterTemperatureC) + String(" C") : String("-");
-  body += F("</dd><dt>Room temp</dt><dd>");
-  body += waterData.valid ? String(waterData.ambientTemperatureC) + String(" C") : String("-");
-  body += F("</dd><dt>History</dt><dd>");
-  body += history.wasLoaded() ? F("Loaded from flash") : F("New session");
-  body += F("</dd><dt>Time sync</dt><dd>");
-  body += history.isTimeSynced() ? F("NTP synced") : F("Waiting for NTP");
-  body += F("</dd><dt>Telnet debug</dt><dd>");
-  body += cfg.telnetDebugEnabled ? F("Enabled on port 23") : F("Disabled");
-  body += F("</dd></dl></section>");
-
   body += F("<section><h2>Graphs</h2><dl><dt>Water usage</dt><dd><a class=\"buttonLink\" href=\"/graphs\">Open graphs</a></dd></dl></section>");
 
   body += F("<section><h2>Fibaro / local API</h2><dl>");
@@ -304,9 +293,6 @@ void AppWebServer::handleRoot() {
   body += htmlEscape(deviceIp);
   body += F("/data.json</code></dd><dt>Hourly plot</dt><dd><code>/dayplot.json</code></dd><dt>Daily plot</dt><dd><code>/monthplot.json</code></dd>");
   body += F("<dt>Sync rule</dt><dd>Use total_m3 as source of truth and treat data as stale when last_frame_age_s is high.</dd></dl></section>");
-
-  body += F("<section><h2>Tools</h2><dl><dt>Setup</dt><dd><a class=\"buttonLink\" href=\"/setup\">Open setup</a></dd>");
-  body += F("<dt>Firmware</dt><dd><a class=\"buttonLink\" href=\"/firmware\">Upload firmware</a></dd></dl></section>");
 
   sendHtml(body);
 }
@@ -677,8 +663,8 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">");
   html += F("<title>Multical 21 Reader</title><style>");
   html += F("body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#eef3f7;color:#111827}");
-  html += F("header{background:#12344d;color:white;padding:18px 20px;border-bottom:4px solid #0b7285}main{max-width:980px;margin:0 auto;padding:18px}");
-  html += F("nav{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}nav a{color:white;text-decoration:none;border:1px solid #486581;border-radius:6px;padding:7px 10px;font-weight:700;font-size:13px}");
+  html += F("header{background:#12344d;color:white;padding:14px 20px;border-bottom:4px solid #0b7285;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}main{max-width:980px;margin:0 auto;padding:18px}");
+  html += F("nav{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}nav a{color:white;text-decoration:none;border:1px solid #486581;border-radius:6px;padding:7px 10px;font-weight:700;font-size:13px}");
   html += F("section{background:white;border:1px solid #d9e2ec;border-radius:8px;padding:16px;margin:0 0 16px}");
   html += F("h1{font-size:24px;margin:0}h2{font-size:18px;margin:0 0 12px}dl{display:grid;grid-template-columns:160px 1fr;gap:8px;margin:0}");
   html += F("dt{color:#52606d}dd{margin:0;font-weight:600}form{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}");
@@ -687,7 +673,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F(".danger{background:#b42318}");
   html += F(".uploadForm{margin-top:14px}.hint{color:#52606d;font-size:13px;margin:12px 0 0}");
   html += F(".hero{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:18px;align-items:center;background:#12344d;color:white;border-color:#12344d}.hero h2{font-size:28px;margin:0 0 8px}.eyebrow{margin:0 0 6px;color:#9fb3c8;font-size:12px;font-weight:800;text-transform:uppercase}.heroText{margin:0;color:#d9e2ec}.heroMeter{border:1px solid #486581;border-radius:8px;padding:14px;background:#0f2f46}.heroMeter span,.heroMeter small{display:block;color:#bcccdc}.heroMeter strong{display:block;font-size:34px;line-height:1.1;margin:4px 0}");
-  html += F(".cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;background:transparent;border:0;padding:0}.card{background:white;border:1px solid #d9e2ec;border-left:5px solid #0b7285;border-radius:8px;padding:14px;min-height:108px;display:grid;gap:10px}.cardTop{display:flex;justify-content:space-between;gap:8px;align-items:center}.cardTop span{font-size:12px;color:#52606d;font-weight:800;text-transform:uppercase}.card strong{font-size:22px;line-height:1.15;overflow-wrap:anywhere}.card small{color:#52606d;overflow-wrap:anywhere}.card a{font-size:22px;font-weight:800}.chip{border-radius:999px;padding:4px 8px;font-size:11px;color:white;white-space:nowrap}.ok{background:#147d64}.warn{background:#b7791f}.off{background:#627d98}.accentWater{border-left-color:#0b7285}.accentUsage{border-left-color:#2f9e44}.accentWifi{border-left-color:#1864ab}.accentMqtt{border-left-color:#6741d9}.accentTime{border-left-color:#d9480f}.accentTools{border-left-color:#364fc7}.accentVersion{border-left-color:#087f5b}");
+  html += F(".cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;background:transparent;border:0;padding:0}.card{background:white;border:1px solid #d9e2ec;border-left:5px solid #0b7285;border-radius:8px;padding:14px;min-height:108px;display:grid;gap:10px}.cardTop{display:flex;justify-content:space-between;gap:8px;align-items:center}.cardTop span{font-size:12px;color:#52606d;font-weight:800;text-transform:uppercase}.card strong{font-size:22px;line-height:1.15;overflow-wrap:anywhere}.card small{color:#52606d;overflow-wrap:anywhere}.card a{font-size:22px;font-weight:800}.chip{border-radius:999px;padding:4px 8px;font-size:11px;color:white;white-space:nowrap}.ok{background:#147d64}.warn{background:#b7791f}.off{background:#627d98}.accentWater{border-left-color:#0b7285}.accentUsage{border-left-color:#2f9e44}.accentWifi{border-left-color:#1864ab}.accentMqtt{border-left-color:#6741d9}.accentTime{border-left-color:#d9480f}.accentMeter{border-left-color:#c2410c}.accentVersion{border-left-color:#087f5b}");
   html += F(".sectionHead{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin:0 0 10px}.sectionHead h2{margin:0}.sectionHead span{color:#52606d;font-size:12px;font-weight:700;text-transform:uppercase}.graphPanel{padding-bottom:12px}.graphSummary{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px}.graphSummary span{background:#f0f4f8;border:1px solid #d9e2ec;border-radius:6px;padding:7px 9px;color:#52606d;font-size:12px}.graphSummary strong{color:#102a43}");
   html += F(".setupPanel{border-left:5px solid #0b7285}.onboardingPanel{border-color:#0b7285;background:#f8fcfd}.onboardingPanel .sectionHead h2{font-size:24px}.onboardingPanel form{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}");
   html += F(".wifiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.wifiActions span{font-size:13px;color:#334e68}.wifiList{grid-column:1/-1;display:grid;gap:6px}.wifiNet{display:flex;justify-content:space-between;gap:10px;border:1px solid #d9e2ec;border-radius:6px;padding:8px;background:#f8fafc;cursor:pointer}.wifiNet small{color:#52606d}");
