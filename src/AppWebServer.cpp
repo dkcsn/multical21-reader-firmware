@@ -121,56 +121,135 @@ static String twoDigits(int value) {
   return value < 10 ? String("0") + String(value) : String(value);
 }
 
-static String formatGraphLabel(time_t now, int8_t offset, bool days) {
+static const char* monthName(uint8_t month) {
+  static const char* names[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+  return month < 12 ? names[month] : "";
+}
+
+static uint8_t graphCount(char period) {
+  if (period == 'h') return 24;
+  if (period == 'd') return 31;
+  if (period == 'w') return 53;
+  if (period == 'm') return 24;
+  return 10;
+}
+
+static uint32_t graphValue(WaterHistory& history, char period, uint8_t age) {
+  if (period == 'h') return history.getHourMilliM3(age);
+  if (period == 'd') return history.getDayMilliM3(age);
+  if (period == 'w') return history.getWeekMilliM3(age);
+  if (period == 'm') return history.getMonthMilliM3(age);
+  return history.getYearMilliM3(age);
+}
+
+static time_t shiftMonth(time_t now, int8_t offset) {
+  struct tm* tm = gmtime(&now);
+  if (tm == nullptr) {
+    return 0;
+  }
+  int year = tm->tm_year + 1900;
+  int month = tm->tm_mon - offset;
+  while (month < 0) {
+    month += 12;
+    year--;
+  }
+  struct tm shifted = *tm;
+  shifted.tm_year = year - 1900;
+  shifted.tm_mon = month;
+  shifted.tm_mday = 1;
+  return mktime(&shifted);
+}
+
+static String formatGraphLabel(time_t now, int8_t offset, char period) {
   if (now == 0) {
     return offset == 0 ? String("now") : String(offset);
   }
 
-  time_t point = now - ((time_t) offset * (days ? 86400 : 3600));
+  time_t point = now;
+  if (period == 'h') {
+    point = now - ((time_t) offset * 3600);
+  } else if (period == 'd') {
+    point = now - ((time_t) offset * 86400);
+  } else if (period == 'w') {
+    point = now - ((time_t) offset * 7 * 86400);
+  } else if (period == 'm') {
+    point = shiftMonth(now, offset);
+  } else {
+    point = shiftMonth(now, offset * 12);
+  }
+
   struct tm* tm = gmtime(&point);
   if (tm == nullptr) {
     return offset == 0 ? String("now") : String(offset);
   }
 
-  if (days) {
+  if (period == 'h') {
+    return twoDigits(tm->tm_hour) + String(":00");
+  }
+  if (period == 'd') {
     return twoDigits(tm->tm_mday) + String("/") + twoDigits(tm->tm_mon + 1);
   }
-  return twoDigits(tm->tm_hour) + String(":00");
+  if (period == 'w') {
+    uint8_t week = (tm->tm_yday / 7) + 1;
+    return String("W") + twoDigits(week);
+  }
+  if (period == 'm') {
+    return String(monthName(tm->tm_mon)) + String(" ") + String((tm->tm_year + 1900) % 100);
+  }
+  return String(tm->tm_year + 1900);
 }
 
-static String formatGraphTitle(time_t now, bool days) {
+static String formatGraphTitle(time_t now, char period) {
+  uint8_t count = graphCount(period);
   if (now == 0) {
-    return days ? String("Last 31 days") : String("Last 24 hours");
+    if (period == 'h') return F("Last 24 hours");
+    if (period == 'd') return F("Last 31 days");
+    if (period == 'w') return F("Last 53 weeks");
+    if (period == 'm') return F("Last 24 months");
+    return F("Last 10 years");
   }
 
-  time_t start = now - ((time_t) (days ? 30 : 23) * (days ? 86400 : 3600));
+  time_t start = now;
+  if (period == 'h') start = now - ((time_t) (count - 1) * 3600);
+  else if (period == 'd') start = now - ((time_t) (count - 1) * 86400);
+  else if (period == 'w') start = now - ((time_t) (count - 1) * 7 * 86400);
+  else if (period == 'm') start = shiftMonth(now, count - 1);
+  else start = shiftMonth(now, (count - 1) * 12);
+
   struct tm* startTm = gmtime(&start);
   struct tm startCopy;
   if (startTm == nullptr) {
-    return days ? String("Last 31 days") : String("Last 24 hours");
+    return F("History");
   }
   startCopy = *startTm;
   struct tm* endTm = gmtime(&now);
   if (endTm == nullptr) {
-    return days ? String("Last 31 days") : String("Last 24 hours");
+    return F("History");
   }
 
-  if (days) {
+  if (period == 'h') {
+    return twoDigits(startCopy.tm_mday) + String("/") + twoDigits(startCopy.tm_mon + 1) + String(" ")
+         + twoDigits(startCopy.tm_hour) + String(":00 - ")
+         + twoDigits(endTm->tm_mday) + String("/") + twoDigits(endTm->tm_mon + 1) + String(" ")
+         + twoDigits(endTm->tm_hour) + String(":00");
+  }
+  if (period == 'd' || period == 'w') {
     return twoDigits(startCopy.tm_mday) + String("/") + twoDigits(startCopy.tm_mon + 1) + String("/") + String(startCopy.tm_year + 1900)
          + String(" - ") + twoDigits(endTm->tm_mday) + String("/") + twoDigits(endTm->tm_mon + 1) + String("/") + String(endTm->tm_year + 1900);
   }
-  return twoDigits(startCopy.tm_mday) + String("/") + twoDigits(startCopy.tm_mon + 1) + String(" ")
-       + twoDigits(startCopy.tm_hour) + String(":00 - ")
-       + twoDigits(endTm->tm_mday) + String("/") + twoDigits(endTm->tm_mon + 1) + String(" ")
-       + twoDigits(endTm->tm_hour) + String(":00");
+  if (period == 'm') {
+    return String(monthName(startCopy.tm_mon)) + String(" ") + String(startCopy.tm_year + 1900)
+         + String(" - ") + String(monthName(endTm->tm_mon)) + String(" ") + String(endTm->tm_year + 1900);
+  }
+  return String(startCopy.tm_year + 1900) + String(" - ") + String(endTm->tm_year + 1900);
 }
 
-static String graphBars(WaterHistory& history, bool days, time_t now) {
-  const uint8_t count = days ? 31 : 24;
+static String graphBars(WaterHistory& history, char period, time_t now) {
+  const uint8_t count = graphCount(period);
   uint32_t maxValue = 0;
   uint32_t totalValue = 0;
   for (uint8_t i = 0; i < count; i++) {
-    uint32_t value = days ? history.getDayMilliM3(i) : history.getHourMilliM3(i);
+    uint32_t value = graphValue(history, period, i);
     totalValue += value;
     if (value > maxValue) {
       maxValue = value;
@@ -178,16 +257,16 @@ static String graphBars(WaterHistory& history, bool days, time_t now) {
   }
 
   String out;
-  out.reserve(days ? 3000 : 2600);
+  out.reserve(count * 110);
   out += F("<div class=\"graphSummary\"><span>Total <strong>");
   out += formatM3(totalValue);
   out += F(" m3</strong></span><span>Peak <strong>");
   out += formatM3(maxValue);
   out += F(" m3</strong></span></div><div class=\"bars\">");
   for (int8_t i = count - 1; i >= 0; i--) {
-    uint32_t value = days ? history.getDayMilliM3(i) : history.getHourMilliM3(i);
+    uint32_t value = graphValue(history, period, i);
     uint8_t height = value == 0 || maxValue == 0 ? 0 : (uint8_t) max(6UL, (unsigned long) value * 100UL / maxValue);
-    String label = formatGraphLabel(now, i, days);
+    String label = formatGraphLabel(now, i, period);
     out += F("<div class=\"barwrap\" title=\"");
     out += label;
     out += F(": ");
@@ -418,13 +497,25 @@ void AppWebServer::handleGraphsPage() {
   time_t now = localTimeNow(config.data().timezoneOffsetMinutes);
   String body;
   body += F("<section class=\"graphPanel\"><div class=\"sectionHead\"><h2>Hourly water use</h2><span>");
-  body += formatGraphTitle(now, false);
+  body += formatGraphTitle(now, 'h');
   body += F("</span></div>");
-  body += graphBars(history, false, now);
+  body += graphBars(history, 'h', now);
   body += F("</section><section class=\"graphPanel\"><div class=\"sectionHead\"><h2>Daily water use</h2><span>");
-  body += formatGraphTitle(now, true);
+  body += formatGraphTitle(now, 'd');
   body += F("</span></div>");
-  body += graphBars(history, true, now);
+  body += graphBars(history, 'd', now);
+  body += F("</section><section class=\"graphPanel\"><div class=\"sectionHead\"><h2>Weekly water use</h2><span>");
+  body += formatGraphTitle(now, 'w');
+  body += F("</span></div>");
+  body += graphBars(history, 'w', now);
+  body += F("</section><section class=\"graphPanel\"><div class=\"sectionHead\"><h2>Monthly water use</h2><span>");
+  body += formatGraphTitle(now, 'm');
+  body += F("</span></div>");
+  body += graphBars(history, 'm', now);
+  body += F("</section><section class=\"graphPanel\"><div class=\"sectionHead\"><h2>Yearly water use</h2><span>");
+  body += formatGraphTitle(now, 'y');
+  body += F("</span></div>");
+  body += graphBars(history, 'y', now);
   body += F("</section>");
   sendHtml(body);
 }
@@ -567,6 +658,12 @@ void AppWebServer::handleDataJson() {
   json += formatM3(history.getLast24HoursMilliM3());
   json += F(",\"last_31d_m3\":");
   json += formatM3(history.getLast31DaysMilliM3());
+  json += F(",\"last_53w_m3\":");
+  json += formatM3(history.getLast53WeeksMilliM3());
+  json += F(",\"last_24m_m3\":");
+  json += formatM3(history.getLast24MonthsMilliM3());
+  json += F(",\"last_10y_m3\":");
+  json += formatM3(history.getLast10YearsMilliM3());
   json += F(",\"history_loaded\":");
   json += history.wasLoaded() ? F("true") : F("false");
   json += F(",\"time_synced\":");
