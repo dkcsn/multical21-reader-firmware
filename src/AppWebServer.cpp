@@ -50,20 +50,30 @@ static String formatM3(uint32_t milliM3) {
 static String graphBars(WaterHistory& history, bool days) {
   const uint8_t count = days ? 31 : 24;
   uint32_t maxValue = 0;
+  uint32_t totalValue = 0;
   for (uint8_t i = 0; i < count; i++) {
     uint32_t value = days ? history.getDayMilliM3(i) : history.getHourMilliM3(i);
+    totalValue += value;
     if (value > maxValue) {
       maxValue = value;
     }
   }
 
   String out;
-  out.reserve(days ? 2600 : 2200);
-  out += F("<div class=\"bars\">");
+  out.reserve(days ? 3000 : 2600);
+  out += F("<div class=\"graphSummary\"><span>Total <strong>");
+  out += formatM3(totalValue);
+  out += F(" m3</strong></span><span>Peak <strong>");
+  out += formatM3(maxValue);
+  out += F(" m3</strong></span></div><div class=\"bars\">");
   for (int8_t i = count - 1; i >= 0; i--) {
     uint32_t value = days ? history.getDayMilliM3(i) : history.getHourMilliM3(i);
     uint8_t height = maxValue == 0 ? 0 : (uint8_t) max(6UL, (unsigned long) value * 100UL / maxValue);
-    out += F("<div class=\"barwrap\"><div class=\"bar\" style=\"height:");
+    out += F("<div class=\"barwrap\" title=\"");
+    out += i == 0 ? String("now") : String(i) + (days ? String(" days ago") : String(" hours ago"));
+    out += F(": ");
+    out += formatM3(value);
+    out += F(" m3\"><div class=\"bar\" style=\"height:");
     out += height;
     out += F("%\"></div><span>");
     out += i == 0 ? F("now") : String(i);
@@ -185,9 +195,9 @@ void AppWebServer::handleRoot() {
   body += cfg.telnetDebugEnabled ? F("Enabled on port 23") : F("Disabled");
   body += F("</dd></dl></section>");
 
-  body += F("<section><h2>Hourly water use</h2>");
+  body += F("<section class=\"graphPanel\"><div class=\"sectionHead\"><h2>Hourly water use</h2><span>Last 24 hours</span></div>");
   body += graphBars(history, false);
-  body += F("</section><section><h2>Daily water use</h2>");
+  body += F("</section><section class=\"graphPanel\"><div class=\"sectionHead\"><h2>Daily water use</h2><span>Last 31 days</span></div>");
   body += graphBars(history, true);
   body += F("</section>");
 
@@ -608,9 +618,10 @@ void AppWebServer::sendHtml(const String& body) {
   html += F(".uploadForm{margin-top:14px}.hint{color:#52606d;font-size:13px;margin:12px 0 0}");
   html += F(".hero{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:18px;align-items:center;background:#12344d;color:white;border-color:#12344d}.hero h2{font-size:28px;margin:0 0 8px}.eyebrow{margin:0 0 6px;color:#9fb3c8;font-size:12px;font-weight:800;text-transform:uppercase}.heroText{margin:0;color:#d9e2ec}.heroMeter{border:1px solid #486581;border-radius:8px;padding:14px;background:#0f2f46}.heroMeter span,.heroMeter small{display:block;color:#bcccdc}.heroMeter strong{display:block;font-size:34px;line-height:1.1;margin:4px 0}");
   html += F(".cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;background:transparent;border:0;padding:0}.card{background:white;border:1px solid #d9e2ec;border-left:5px solid #0b7285;border-radius:8px;padding:14px;min-height:108px;display:grid;gap:10px}.cardTop{display:flex;justify-content:space-between;gap:8px;align-items:center}.cardTop span{font-size:12px;color:#52606d;font-weight:800;text-transform:uppercase}.card strong{font-size:22px;line-height:1.15;overflow-wrap:anywhere}.card small{color:#52606d}.card a{font-size:22px;font-weight:800}.chip{border-radius:999px;padding:4px 8px;font-size:11px;color:white;white-space:nowrap}.ok{background:#147d64}.warn{background:#b7791f}.off{background:#627d98}.accentWater{border-left-color:#0b7285}.accentUsage{border-left-color:#2f9e44}.accentWifi{border-left-color:#1864ab}.accentMqtt{border-left-color:#6741d9}.accentTime{border-left-color:#d9480f}.accentTools{border-left-color:#364fc7}");
+  html += F(".sectionHead{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin:0 0 10px}.sectionHead h2{margin:0}.sectionHead span{color:#52606d;font-size:12px;font-weight:700;text-transform:uppercase}.graphPanel{padding-bottom:12px}.graphSummary{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px}.graphSummary span{background:#f0f4f8;border:1px solid #d9e2ec;border-radius:6px;padding:7px 9px;color:#52606d;font-size:12px}.graphSummary strong{color:#102a43}");
   html += F(".wifiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.wifiActions span{font-size:13px;color:#334e68}.wifiList{grid-column:1/-1;display:grid;gap:6px}.wifiNet{display:flex;justify-content:space-between;gap:10px;border:1px solid #d9e2ec;border-radius:6px;padding:8px;background:#f8fafc;cursor:pointer}.wifiNet small{color:#52606d}");
-  html += F(".bars{height:170px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden}");
-  html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0;min-height:1px}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
+  html += F(".bars{height:180px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden;background:linear-gradient(to top,#f8fafc,#fff)}");
+  html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0;min-height:1px}.barwrap:nth-child(2n) .bar{background:#147d64}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
   html += F("@media(max-width:640px){main{padding:12px}.hero{grid-template-columns:1fr}.hero h2{font-size:24px}dl{grid-template-columns:1fr}.heroMeter strong{font-size:30px}}");
   html += F("</style></head><body><header><h1>Multical 21 Reader</h1></header><main>");
   html += body;

@@ -22,6 +22,7 @@ Current firmware baseline:
   WiFi, MQTT, tools, meter serial, and AES key setup.
 - Stores configuration in EEPROM instead of requiring a local `credentials.h`.
 - Supports NTP time sync for calendar-aligned graph buckets.
+- Shows hourly and daily water graphs with total and peak summaries.
 - Publishes decoded water meter state to MQTT as JSON when MQTT is enabled.
 - Supports MQTT retain and secure MQTT/TLS mode. TLS currently uses an insecure
   client mode without CA validation, intended for local broker setups.
