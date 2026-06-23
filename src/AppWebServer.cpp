@@ -109,6 +109,16 @@ static String systemTimeEpochString() {
   return now >= 1600000000 ? String((uint32_t) now) : String("not synced");
 }
 
+static String updateErrorText() {
+#if defined(ESP8266)
+  return Update.getErrorString();
+#elif defined(ESP32)
+  return String(Update.errorString());
+#else
+  return String("Unknown update error");
+#endif
+}
+
 static time_t localTimeNow(int16_t timezoneOffsetMinutes) {
   time_t now = time(nullptr);
   if (now < 1600000000) {
@@ -552,7 +562,9 @@ void AppWebServer::handleFirmwarePage() {
   body += F("</dd>");
   body += F("<dt>Board</dt><dd>");
   body += htmlEscape(firmwareBoardName());
-  body += F("</dd><dt>Free sketch space</dt><dd>");
+  body += F("</dd><dt>Sketch size</dt><dd>");
+  body += String(ESP.getSketchSize());
+  body += F(" bytes</dd><dt>Free OTA space</dt><dd>");
   body += String(ESP.getFreeSketchSpace());
   body += F(" bytes</dd></dl>");
   body += F("<form class=\"uploadForm\" method=\"post\" action=\"/firmware\" enctype=\"multipart/form-data\">");
@@ -597,18 +609,21 @@ void AppWebServer::handleFirmwareUpload() {
     maxSketchSpace = (maxSketchSpace - 0x1000) & 0xFFFFF000;
 #endif
     if (!Update.begin(maxSketchSpace)) {
-      firmwareUploadMessage = F("Not enough space or invalid update start");
+      firmwareUploadMessage = String("Update start failed: ") + updateErrorText() +
+                              String(" (free OTA ") + String(maxSketchSpace) + String(" bytes)");
     }
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-      firmwareUploadMessage = F("Write failed");
+      firmwareUploadMessage = String("Write failed: ") + updateErrorText();
     }
   } else if (upload.status == UPLOAD_FILE_END) {
     if (Update.end(true)) {
       firmwareUploadSuccess = true;
       firmwareUploadMessage = String("Uploaded ") + upload.totalSize + String(" bytes");
     } else {
-      firmwareUploadMessage = F("Update validation failed");
+      firmwareUploadMessage = String("Update validation failed: ") + updateErrorText() +
+                              String(" (uploaded ") + String(upload.totalSize) +
+                              String(" bytes, free OTA ") + String(ESP.getFreeSketchSpace()) + String(" bytes)");
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
     Update.end();
