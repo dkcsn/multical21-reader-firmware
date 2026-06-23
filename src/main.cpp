@@ -9,14 +9,17 @@
 #if defined(ESP8266)
   #include <ESP8266WiFi.h>
   #include <ESP8266mDNS.h>
+  #include <WiFiClientSecureBearSSL.h>
 #elif defined(ESP32)
   #include <WiFi.h>
   #include <ESPmDNS.h>
+  #include <WiFiClientSecure.h>
 #endif
 
 #include <ArduinoOTA.h>
 #include <DNSServer.h>
 #include <PubSubClient.h>
+#include <time.h>
 
 #include "AppConfig.h"
 #include "AppWebServer.h"
@@ -39,7 +42,12 @@ WaterMeter waterMeter;
 AppWebServer webServer(appConfig, waterData, waterHistory);
 
 WiFiClient espMqttClient;
-PubSubClient mqttClient(espMqttClient);
+#if defined(ESP8266)
+BearSSL::WiFiClientSecure secureMqttClient;
+#else
+WiFiClientSecure secureMqttClient;
+#endif
+PubSubClient mqttClient;
 DNSServer dnsServer;
 
 bool setupApMode = false;
@@ -65,6 +73,23 @@ static String topic(const char* suffix) {
     return base + suffix;
   }
   return base + "/" + suffix;
+}
+
+static time_t localNow() {
+  time_t now = time(nullptr);
+  if (now < 1600000000) {
+    return 0;
+  }
+  return now + ((time_t) appConfig.data().timezoneOffsetMinutes * 60);
+}
+
+static void setupNtp() {
+  if (!appConfig.data().ntpEnabled || WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+  configTime(0, 0, appConfig.data().ntpServer);
+  Serial.print("NTP configured: ");
+  Serial.println(appConfig.data().ntpServer);
 }
 
 static bool connectWifi() {
@@ -124,6 +149,16 @@ static bool mqttConnect() {
     return false;
   }
 
+  if (appConfig.data().mqttSecure) {
+#if defined(ESP8266)
+    secureMqttClient.setInsecure();
+#else
+    secureMqttClient.setInsecure();
+#endif
+    mqttClient.setClient(secureMqttClient);
+  } else {
+    mqttClient.setClient(espMqttClient);
+  }
   mqttClient.setServer(appConfig.data().mqttHost, appConfig.data().mqttPort);
   String clientId = String(ESP_NAME) + "-" + chipIdHex();
   String onlineTopic = topic("online");
@@ -150,8 +185,8 @@ static bool mqttConnect() {
   }
 
   if (connected) {
-    mqttClient.publish(onlineTopic.c_str(), "true", true);
-    mqttClient.publish(topic("ip").c_str(), WiFi.localIP().toString().c_str(), true);
+    mqttClient.publish(onlineTopic.c_str(), "true", appConfig.data().mqttRetain);
+    mqttClient.publish(topic("ip").c_str(), WiFi.localIP().toString().c_str(), appConfig.data().mqttRetain);
     Serial.println("MQTT connected");
   }
   return connected;
@@ -190,7 +225,7 @@ static void publishWaterData() {
   payload += String(waterHistory.getLast24HoursMilliM3() / 1000.0f, 3);
   payload += "}";
 
-  mqttClient.publish(topic("state").c_str(), payload.c_str(), true);
+  mqttClient.publish(topic("state").c_str(), payload.c_str(), appConfig.data().mqttRetain);
 }
 
 static void startRadioIfConfigured() {
@@ -218,6 +253,7 @@ void setup() {
   if (!connectWifi()) {
     startSetupAp();
   } else {
+    setupNtp();
     setupOTA();
     MDNS.begin(ESP_NAME);
   }
@@ -235,10 +271,11 @@ void loop() {
   }
 
   webServer.handleClient();
+  waterHistory.loop();
   startRadioIfConfigured();
 
   if (radioStarted && waterMeter.readFrame(waterData, appConfig.data())) {
-    waterHistory.update(waterData);
+    waterHistory.update(waterData, localNow());
     publishWaterData();
     lastMqttPublish = millis();
   }

@@ -7,6 +7,12 @@ struct AppConfigData {
   uint32_t magic;
   char wifiSsid[33];
   char wifiPassword[65];
+  bool ntpEnabled;
+  char ntpServer[65];
+  int16_t timezoneOffsetMinutes;
+  bool mqttEnabled;
+  bool mqttRetain;
+  bool mqttSecure;
   char mqttHost[129];
   uint16_t mqttPort;
   char mqttUsername[65];

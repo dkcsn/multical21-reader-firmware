@@ -1,7 +1,7 @@
 #include "AppConfig.h"
 #include <EEPROM.h>
 
-static const uint32_t CONFIG_MAGIC = 0x4D433231;
+static const uint32_t CONFIG_MAGIC = 0x4D433232;
 static const size_t EEPROM_SIZE = 1024;
 static const int EEPROM_ADDRESS = 0;
 
@@ -61,12 +61,17 @@ bool AppConfig::load() {
   }
   config.wifiSsid[sizeof(config.wifiSsid) - 1] = '\0';
   config.wifiPassword[sizeof(config.wifiPassword) - 1] = '\0';
+  config.ntpServer[sizeof(config.ntpServer) - 1] = '\0';
   config.mqttHost[sizeof(config.mqttHost) - 1] = '\0';
   config.mqttUsername[sizeof(config.mqttUsername) - 1] = '\0';
   config.mqttPassword[sizeof(config.mqttPassword) - 1] = '\0';
   config.mqttBaseTopic[sizeof(config.mqttBaseTopic) - 1] = '\0';
   if (config.mqttPort == 0) {
-    config.mqttPort = 1883;
+    config.mqttPort = config.mqttSecure ? 8883 : 1883;
+  }
+  if (strlen(config.ntpServer) == 0) {
+    strncpy(config.ntpServer, "pool.ntp.org", sizeof(config.ntpServer) - 1);
+    config.ntpServer[sizeof(config.ntpServer) - 1] = '\0';
   }
   return true;
 }
@@ -95,7 +100,7 @@ bool AppConfig::hasWifi() const {
 }
 
 bool AppConfig::hasMqtt() const {
-  return strlen(config.mqttHost) > 0;
+  return config.mqttEnabled && strlen(config.mqttHost) > 0;
 }
 
 bool AppConfig::hasMeter() const {
@@ -137,6 +142,12 @@ String AppConfig::maskedMqttPassword() const {
 void AppConfig::setDefaults() {
   memset(&config, 0, sizeof(config));
   config.magic = CONFIG_MAGIC;
+  config.ntpEnabled = true;
+  strncpy(config.ntpServer, "pool.ntp.org", sizeof(config.ntpServer) - 1);
+  config.timezoneOffsetMinutes = 60;
+  config.mqttEnabled = false;
+  config.mqttRetain = true;
+  config.mqttSecure = false;
   config.mqttPort = 1883;
   strncpy(config.mqttBaseTopic, "watermeter", sizeof(config.mqttBaseTopic) - 1);
 }

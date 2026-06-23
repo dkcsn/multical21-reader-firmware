@@ -18,9 +18,13 @@ Current firmware baseline:
 - Serves a small browser UI on port 80 for WiFi, MQTT, meter serial, and AES key
   setup.
 - Stores configuration in EEPROM instead of requiring a local `credentials.h`.
-- Publishes decoded water meter state to MQTT as JSON when MQTT is configured.
+- Supports NTP time sync for calendar-aligned graph buckets.
+- Publishes decoded water meter state to MQTT as JSON when MQTT is enabled.
+- Supports MQTT retain and secure MQTT/TLS mode. TLS currently uses an insecure
+  client mode without CA validation, intended for local broker setups.
 - Tracks in-memory hourly and daily consumption history from the cumulative
   Multical 21 counter.
+- Persists graph history to LittleFS so charts can survive reboot.
 - Exposes `/configuration.json`, `/data.json`, `/dayplot.json`, and
   `/monthplot.json` for UI/API use.
 - Uses ESP32 mbedTLS AES-CTR and ESP8266 Crypto AES-CTR for Multical 21 frame
@@ -34,6 +38,16 @@ First boot:
 4. Enter WiFi, MQTT, meter serial as 8 hex characters, and AES key as 32 hex
    characters.
 5. Save and reboot.
+
+Fibaro Home Center can poll:
+
+- `http://<device-ip>/data.json` for current state and sync-safe total counter.
+- `http://<device-ip>/dayplot.json` for the 24 hour graph.
+- `http://<device-ip>/monthplot.json` for the 31 day graph.
+
+Use `total_m3` as the source of truth. If Fibaro misses polls, it can recover by
+calculating the difference between the latest `total_m3` and the last value it
+stored. Use `last_frame_age_s` to detect stale radio data.
 
 Added MQTT data upload to the project from weetmuts original the values was only send to the serial terminal.
 And how the data is written to the serial terminal.

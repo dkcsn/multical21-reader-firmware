@@ -95,6 +95,10 @@ void AppWebServer::handleRoot() {
   body += waterData.valid ? String(waterData.waterTemperatureC) + String(" C") : String("-");
   body += F("</dd><dt>Room temp</dt><dd>");
   body += waterData.valid ? String(waterData.ambientTemperatureC) + String(" C") : String("-");
+  body += F("</dd><dt>History</dt><dd>");
+  body += history.wasLoaded() ? F("Loaded from flash") : F("New session");
+  body += F("</dd><dt>Time sync</dt><dd>");
+  body += history.isTimeSynced() ? F("NTP synced") : F("Waiting for NTP");
   body += F("</dd></dl></section>");
 
   body += F("<section><h2>Hourly water use</h2>");
@@ -103,6 +107,12 @@ void AppWebServer::handleRoot() {
   body += graphBars(history, true);
   body += F("</section>");
 
+  body += F("<section><h2>Fibaro / local API</h2><dl>");
+  body += F("<dt>State JSON</dt><dd><code>http://");
+  body += WiFi.status() == WL_CONNECTED ? htmlEscape(WiFi.localIP().toString()) : String("192.168.4.1");
+  body += F("/data.json</code></dd><dt>Hourly plot</dt><dd><code>/dayplot.json</code></dd><dt>Daily plot</dt><dd><code>/monthplot.json</code></dd>");
+  body += F("<dt>Sync rule</dt><dd>Use total_m3 as source of truth and treat data as stale when last_frame_age_s is high.</dd></dl></section>");
+
   body += F("<section><h2>Setup</h2><form method=\"post\" action=\"/save\">");
   body += F("<label>WiFi SSID<input name=\"wifiSsid\" value=\"");
   body += htmlEscape(cfg.wifiSsid);
@@ -110,6 +120,22 @@ void AppWebServer::handleRoot() {
   body += F("<label>WiFi password<input name=\"wifiPassword\" type=\"password\" placeholder=\"");
   body += htmlEscape(config.maskedWifiPassword());
   body += F("\"></label>");
+  body += F("<label>NTP enabled<select name=\"ntpEnabled\"><option value=\"1\"");
+  body += cfg.ntpEnabled ? F(" selected") : F("");
+  body += F(">Enabled</option><option value=\"0\"");
+  body += !cfg.ntpEnabled ? F(" selected") : F("");
+  body += F(">Disabled</option></select></label>");
+  body += F("<label>NTP server<input name=\"ntpServer\" value=\"");
+  body += htmlEscape(cfg.ntpServer);
+  body += F("\"></label>");
+  body += F("<label>Timezone offset minutes<input name=\"timezoneOffsetMinutes\" inputmode=\"numeric\" value=\"");
+  body += String(cfg.timezoneOffsetMinutes);
+  body += F("\"></label>");
+  body += F("<label>MQTT enabled<select name=\"mqttEnabled\"><option value=\"1\"");
+  body += cfg.mqttEnabled ? F(" selected") : F("");
+  body += F(">Enabled</option><option value=\"0\"");
+  body += !cfg.mqttEnabled ? F(" selected") : F("");
+  body += F(">Disabled</option></select></label>");
   body += F("<label>MQTT host<input name=\"mqttHost\" value=\"");
   body += htmlEscape(cfg.mqttHost);
   body += F("\"></label>");
@@ -125,6 +151,16 @@ void AppWebServer::handleRoot() {
   body += F("<label>MQTT base topic<input name=\"mqttBaseTopic\" value=\"");
   body += htmlEscape(cfg.mqttBaseTopic);
   body += F("\"></label>");
+  body += F("<label>MQTT retain<select name=\"mqttRetain\"><option value=\"1\"");
+  body += cfg.mqttRetain ? F(" selected") : F("");
+  body += F(">Enabled</option><option value=\"0\"");
+  body += !cfg.mqttRetain ? F(" selected") : F("");
+  body += F(">Disabled</option></select></label>");
+  body += F("<label>Secure MQTT TLS<select name=\"mqttSecure\"><option value=\"1\"");
+  body += cfg.mqttSecure ? F(" selected") : F("");
+  body += F(">Enabled</option><option value=\"0\"");
+  body += !cfg.mqttSecure ? F(" selected") : F("");
+  body += F(">Disabled</option></select></label>");
   body += F("<label>Meter serial hex<input name=\"meterSerial\" value=\"");
   body += htmlEscape(config.meterSerialHex());
   body += F("\" maxlength=\"8\"></label>");
@@ -144,7 +180,19 @@ void AppWebServer::handleConfigJson() {
   json += cfg.wifiSsid;
   json += F("\",\"wifiPassword\":\"");
   json += config.maskedWifiPassword();
-  json += F("\",\"mqttHost\":\"");
+  json += F("\",\"ntpEnabled\":");
+  json += cfg.ntpEnabled ? F("true") : F("false");
+  json += F(",\"ntpServer\":\"");
+  json += cfg.ntpServer;
+  json += F("\",\"timezoneOffsetMinutes\":");
+  json += cfg.timezoneOffsetMinutes;
+  json += F(",\"mqttEnabled\":");
+  json += cfg.mqttEnabled ? F("true") : F("false");
+  json += F(",\"mqttRetain\":");
+  json += cfg.mqttRetain ? F("true") : F("false");
+  json += F(",\"mqttSecure\":");
+  json += cfg.mqttSecure ? F("true") : F("false");
+  json += F(",\"mqttHost\":\"");
   json += cfg.mqttHost;
   json += F("\",\"mqttPort\":");
   json += cfg.mqttPort;
@@ -179,6 +227,10 @@ void AppWebServer::handleDataJson() {
   json += formatM3(history.getLast24HoursMilliM3());
   json += F(",\"last_31d_m3\":");
   json += formatM3(history.getLast31DaysMilliM3());
+  json += F(",\"history_loaded\":");
+  json += history.wasLoaded() ? F("true") : F("false");
+  json += F(",\"time_synced\":");
+  json += history.isTimeSynced() ? F("true") : F("false");
   json += F(",\"water_temperature_c\":");
   json += waterData.waterTemperatureC;
   json += F(",\"ambient_temperature_c\":");
@@ -234,10 +286,20 @@ void AppWebServer::handleSave() {
     copyArg(cfg.wifiPassword, sizeof(cfg.wifiPassword), wifiPassword);
   }
 
+  cfg.ntpEnabled = server.arg("ntpEnabled") == "1";
+  copyArg(cfg.ntpServer, sizeof(cfg.ntpServer), server.arg("ntpServer"));
+  if (strlen(cfg.ntpServer) == 0) {
+    strncpy(cfg.ntpServer, "pool.ntp.org", sizeof(cfg.ntpServer) - 1);
+    cfg.ntpServer[sizeof(cfg.ntpServer) - 1] = '\0';
+  }
+  cfg.timezoneOffsetMinutes = (int16_t) server.arg("timezoneOffsetMinutes").toInt();
+  cfg.mqttEnabled = server.arg("mqttEnabled") == "1";
+  cfg.mqttRetain = server.arg("mqttRetain") == "1";
+  cfg.mqttSecure = server.arg("mqttSecure") == "1";
   copyArg(cfg.mqttHost, sizeof(cfg.mqttHost), server.arg("mqttHost"));
   cfg.mqttPort = (uint16_t) server.arg("mqttPort").toInt();
   if (cfg.mqttPort == 0) {
-    cfg.mqttPort = 1883;
+    cfg.mqttPort = cfg.mqttSecure ? 8883 : 1883;
   }
   copyArg(cfg.mqttUsername, sizeof(cfg.mqttUsername), server.arg("mqttUsername"));
   String mqttPassword = server.arg("mqttPassword");
@@ -283,7 +345,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("section{background:white;border:1px solid #d9e2ec;border-radius:8px;padding:16px;margin:0 0 16px}");
   html += F("h1{font-size:24px;margin:0}h2{font-size:18px;margin:0 0 12px}dl{display:grid;grid-template-columns:160px 1fr;gap:8px;margin:0}");
   html += F("dt{color:#52606d}dd{margin:0;font-weight:600}form{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}");
-  html += F("label{display:grid;gap:5px;font-size:13px;color:#334e68}input{font:inherit;padding:10px;border:1px solid #bcccdc;border-radius:6px}");
+  html += F("code{font-size:12px;overflow-wrap:anywhere}label{display:grid;gap:5px;font-size:13px;color:#334e68}input,select{font:inherit;padding:10px;border:1px solid #bcccdc;border-radius:6px;background:white}");
   html += F("button{font:inherit;padding:10px 14px;border:0;border-radius:6px;background:#0b7285;color:white;font-weight:700;cursor:pointer;align-self:end}");
   html += F(".bars{height:170px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden}");
   html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0;min-height:1px}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
