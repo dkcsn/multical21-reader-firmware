@@ -87,6 +87,19 @@ static String meterStatusClass(const WaterData& data) {
   return F("statusOk");
 }
 
+static String radioRssiClass(const WaterData& data) {
+  if (!data.radioRssiValid) {
+    return F("statusOff");
+  }
+  if (data.radioRssiDbm >= -85) {
+    return F("statusOk");
+  }
+  if (data.radioRssiDbm >= -100) {
+    return F("statusWarn");
+  }
+  return F("statusAlarm");
+}
+
 static bool systemTimeSynced() {
   return time(nullptr) >= 1600000000;
 }
@@ -567,6 +580,8 @@ void AppWebServer::handleDataJson() {
   json += F(",\"meter_status\":\"");
   json += jsonEscape(meterStatusText(waterData));
   json += F("\"");
+  json += F(",\"radio_rssi_dbm\":");
+  json += waterData.radioRssiValid ? String(waterData.radioRssiDbm) : F("null");
   json += F(",\"alarms\":{\"burst\":");
   json += waterData.alarms.burst ? F("true") : F("false");
   json += F(",\"leak\":");
@@ -799,6 +814,11 @@ void AppWebServer::sendHtml(const String& body) {
   html += radioLive ? F("statusOk") : (waterData.valid ? F("statusWarn") : F("statusOff"));
   html += F("\" title=\"Latest Multical wireless M-Bus frame\"><span class=\"statusDot\"></span><span class=\"statusText\">");
   html += radioLive ? F("RX Live") : (waterData.valid ? String("RX ") + String(frameAgeSeconds) + String("s") : String("RX Waiting"));
+  html += F("</span></span>");
+  html += F("<span class=\"statusPill ");
+  html += radioRssiClass(waterData);
+  html += F("\" title=\"CC1101 received signal strength\"><span class=\"statusDot\"></span><span class=\"statusText\">");
+  html += waterData.radioRssiValid ? String("RSSI ") + String(waterData.radioRssiDbm) + String(" dBm") : String("RSSI --");
   html += F("</span></span>");
   html += F("<span class=\"statusPill ");
   html += meterStatusClass(waterData);

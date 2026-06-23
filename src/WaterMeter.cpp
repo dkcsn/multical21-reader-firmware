@@ -176,7 +176,7 @@ void WaterMeter::restartRadio(void)
   attachInterrupt(digitalPinToInterrupt(CC1101_GDO0), GD0_ISR, FALLING);
 }
 
-void WaterMeter::checkRadioHealth(void)
+void WaterMeter::checkRadioHealth(WaterData& waterData)
 {
   if (millis() - lastHealthCheckMillis < RADIO_HEALTH_INTERVAL_MS) {
     return;
@@ -186,9 +186,11 @@ void WaterMeter::checkRadioHealth(void)
   uint8_t marcState = readReg(CC1101_MARCSTATE, CC1101_STATUS_REGISTER);
   uint8_t rxBytes = readReg(CC1101_RXBYTES, CC1101_STATUS_REGISTER);
   uint8_t rssi = readReg(CC1101_RSSI, CC1101_STATUS_REGISTER);
+  waterData.radioRssiDbm = rssiToDbm(rssi);
+  waterData.radioRssiValid = true;
 
   Debug.printf("CC1101 health: MARC 0x%02X, RX bytes %u, RSSI %d dBm\n\r",
-               marcState, rxBytes & 0x7F, rssiToDbm(rssi));
+               marcState, rxBytes & 0x7F, waterData.radioRssiDbm);
 
   if ((rxBytes & 0x80) != 0 || marcState == MARCSTATE_RXFIFO_OVERFLOW) {
     Debug.println("CC1101 RX FIFO overflow");
@@ -271,7 +273,7 @@ void GD0_ISR(void) {
 // does the frame checking and decryption
 bool WaterMeter::readFrame(WaterData& waterData, const AppConfigData& config)
 {
-  checkRadioHealth();
+  checkRadioHealth(waterData);
 
   if (packetAvailable)
   {
@@ -331,6 +333,9 @@ uint8_t WaterMeter::readByteFromFifo(void)
 void WaterMeter::receive(WMBusFrame * frame, WaterData& waterData)
 {
   uint8_t rxBytesBefore = readReg(CC1101_RXBYTES, CC1101_STATUS_REGISTER);
+  uint8_t rssi = readReg(CC1101_RSSI, CC1101_STATUS_REGISTER);
+  waterData.radioRssiDbm = rssiToDbm(rssi);
+  waterData.radioRssiValid = true;
   Debug.printf("CC1101 RX FIFO before read: %u bytes%s\n\r",
                rxBytesBefore & 0x7F, (rxBytesBefore & 0x80) ? " overflow" : "");
 

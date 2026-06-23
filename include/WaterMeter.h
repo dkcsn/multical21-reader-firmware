@@ -218,7 +218,7 @@ class WaterMeter
     void restartRadio(void);
 
     // periodic radio health check and recovery
-    void checkRadioHealth(void);
+    void checkRadioHealth(WaterData& waterData);
 
     // log cc1101 identity and state
     void logRadioIdentity(void);

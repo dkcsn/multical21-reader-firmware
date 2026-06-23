@@ -15,6 +15,8 @@ struct WaterData {
   uint32_t monthStartMilliM3 = 0;
   int8_t waterTemperatureC = 0;
   int8_t ambientTemperatureC = 0;
+  int16_t radioRssiDbm = 0;
+  bool radioRssiValid = false;
   WaterAlarms alarms;
   unsigned long lastFrameMillis = 0;
   bool valid = false;
