@@ -27,6 +27,7 @@ Current firmware baseline:
   client mode without CA validation, intended for local broker setups.
 - Supports Home Assistant MQTT discovery for water totals, usage windows,
   temperatures, last frame age, and Multical alarm flags.
+- Supports browser firmware upload from `/firmware`.
 - Tracks in-memory hourly and daily consumption history from the cumulative
   Multical 21 counter.
 - Persists graph history to LittleFS so charts can survive reboot.
@@ -43,6 +44,13 @@ First boot:
 4. Scan/test WiFi, then enter MQTT, meter serial as 8 hex characters, and AES key as 32 hex
    characters.
 5. Save and reboot.
+
+Firmware update:
+
+1. Build the matching PlatformIO target.
+2. Open `http://<device-ip>/firmware`.
+3. Upload the matching `.pio/build/<environment>/firmware.bin`.
+4. The device validates the image and restarts when the upload succeeds.
 
 Fibaro Home Center can poll:
 

@@ -2,8 +2,10 @@
 
 #if defined(ESP8266)
   #include <ESP8266WiFi.h>
+  #include <Updater.h>
 #elif defined(ESP32)
   #include <WiFi.h>
+  #include <Update.h>
 #endif
 
 static String htmlEscape(const String& value) {
@@ -82,11 +84,14 @@ static bool isOpenNetwork(uint8_t index) {
 }
 
 AppWebServer::AppWebServer(AppConfig& config, WaterData& waterData, WaterHistory& history)
-  : config(config), waterData(waterData), history(history), server(80) {
+  : config(config), waterData(waterData), history(history), server(80),
+    firmwareUploadSuccess(false), firmwareUploadMessage() {
 }
 
 void AppWebServer::begin() {
   server.on("/", HTTP_GET, std::bind(&AppWebServer::handleRoot, this));
+  server.on("/firmware", HTTP_GET, std::bind(&AppWebServer::handleFirmwarePage, this));
+  server.on("/firmware", HTTP_POST, std::bind(&AppWebServer::handleFirmwarePost, this), std::bind(&AppWebServer::handleFirmwareUpload, this));
   server.on("/configuration.json", HTTP_GET, std::bind(&AppWebServer::handleConfigJson, this));
   server.on("/data.json", HTTP_GET, std::bind(&AppWebServer::handleDataJson, this));
   server.on("/dayplot.json", HTTP_GET, std::bind(&AppWebServer::handleDayPlotJson, this));
@@ -147,6 +152,8 @@ void AppWebServer::handleRoot() {
   body += WiFi.status() == WL_CONNECTED ? htmlEscape(WiFi.localIP().toString()) : String("192.168.4.1");
   body += F("/data.json</code></dd><dt>Hourly plot</dt><dd><code>/dayplot.json</code></dd><dt>Daily plot</dt><dd><code>/monthplot.json</code></dd>");
   body += F("<dt>Sync rule</dt><dd>Use total_m3 as source of truth and treat data as stale when last_frame_age_s is high.</dd></dl></section>");
+
+  body += F("<section><h2>Firmware</h2><dl><dt>Browser update</dt><dd><a class=\"buttonLink\" href=\"/firmware\">Upload firmware</a></dd></dl></section>");
 
   body += F("<section><h2>Setup</h2><form method=\"post\" action=\"/save\">");
   body += F("<label>WiFi SSID<input id=\"wifiSsid\" name=\"wifiSsid\" value=\"");
@@ -214,6 +221,80 @@ void AppWebServer::handleRoot() {
   body += F("<button type=\"submit\">Save</button></form>");
   body += F("<form method=\"post\" action=\"/reboot\"><button type=\"submit\">Reboot</button></form></section>");
   sendHtml(body);
+}
+
+void AppWebServer::handleFirmwarePage() {
+  String body;
+  body.reserve(1300);
+  body += F("<section><h2>Firmware update</h2><dl>");
+  body += F("<dt>Board</dt><dd>");
+#if defined(ESP8266)
+  body += F("ESP8266");
+#else
+  body += F("ESP32");
+#endif
+  body += F("</dd><dt>Free sketch space</dt><dd>");
+  body += String(ESP.getFreeSketchSpace());
+  body += F(" bytes</dd></dl>");
+  body += F("<form class=\"uploadForm\" method=\"post\" action=\"/firmware\" enctype=\"multipart/form-data\">");
+  body += F("<label>Firmware .bin<input name=\"firmware\" type=\"file\" accept=\".bin\" required></label>");
+  body += F("<button type=\"submit\">Upload and restart</button></form>");
+  body += F("<p class=\"hint\">Use the PlatformIO firmware binary from the matching board build.</p>");
+  body += F("</section>");
+  sendHtml(body);
+}
+
+void AppWebServer::handleFirmwarePost() {
+  String body;
+  body.reserve(900);
+  body += F("<section><h2>Firmware update</h2><dl><dt>Status</dt><dd>");
+  body += firmwareUploadSuccess ? F("Update complete") : F("Update failed");
+  body += F("</dd><dt>Message</dt><dd>");
+  body += htmlEscape(firmwareUploadMessage);
+  body += F("</dd></dl>");
+  if (firmwareUploadSuccess) {
+    body += F("<p class=\"hint\">Device is restarting now. Reconnect to the same IP or setup portal when it comes back.</p>");
+  } else {
+    body += F("<p><a class=\"buttonLink\" href=\"/firmware\">Try again</a></p>");
+  }
+  body += F("</section>");
+  sendHtml(body);
+
+  if (firmwareUploadSuccess) {
+    delay(600);
+    ESP.restart();
+  }
+}
+
+void AppWebServer::handleFirmwareUpload() {
+  HTTPUpload& upload = server.upload();
+
+  if (upload.status == UPLOAD_FILE_START) {
+    firmwareUploadSuccess = false;
+    firmwareUploadMessage = String("Receiving ") + upload.filename;
+
+    uint32_t maxSketchSpace = ESP.getFreeSketchSpace();
+#if defined(ESP8266)
+    maxSketchSpace = (maxSketchSpace - 0x1000) & 0xFFFFF000;
+#endif
+    if (!Update.begin(maxSketchSpace)) {
+      firmwareUploadMessage = F("Not enough space or invalid update start");
+    }
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+      firmwareUploadMessage = F("Write failed");
+    }
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (Update.end(true)) {
+      firmwareUploadSuccess = true;
+      firmwareUploadMessage = String("Uploaded ") + upload.totalSize + String(" bytes");
+    } else {
+      firmwareUploadMessage = F("Update validation failed");
+    }
+  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    Update.end();
+    firmwareUploadMessage = F("Upload aborted");
+  }
 }
 
 void AppWebServer::handleConfigJson() {
@@ -471,7 +552,8 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("h1{font-size:24px;margin:0}h2{font-size:18px;margin:0 0 12px}dl{display:grid;grid-template-columns:160px 1fr;gap:8px;margin:0}");
   html += F("dt{color:#52606d}dd{margin:0;font-weight:600}form{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}");
   html += F("code{font-size:12px;overflow-wrap:anywhere}label{display:grid;gap:5px;font-size:13px;color:#334e68}input,select{font:inherit;padding:10px;border:1px solid #bcccdc;border-radius:6px;background:white}");
-  html += F("button{font:inherit;padding:10px 14px;border:0;border-radius:6px;background:#0b7285;color:white;font-weight:700;cursor:pointer;align-self:end}");
+  html += F("button,.buttonLink{font:inherit;padding:10px 14px;border:0;border-radius:6px;background:#0b7285;color:white;font-weight:700;cursor:pointer;align-self:end;text-decoration:none;display:inline-block}");
+  html += F(".uploadForm{margin-top:14px}.hint{color:#52606d;font-size:13px;margin:12px 0 0}");
   html += F(".wifiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.wifiActions span{font-size:13px;color:#334e68}.wifiList{grid-column:1/-1;display:grid;gap:6px}.wifiNet{display:flex;justify-content:space-between;gap:10px;border:1px solid #d9e2ec;border-radius:6px;padding:8px;background:#f8fafc;cursor:pointer}.wifiNet small{color:#52606d}");
   html += F(".bars{height:170px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden}");
   html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0;min-height:1px}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");

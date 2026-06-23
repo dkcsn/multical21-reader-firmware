@@ -25,8 +25,13 @@ private:
   WaterData& waterData;
   WaterHistory& history;
   DeviceWebServer server;
+  bool firmwareUploadSuccess;
+  String firmwareUploadMessage;
 
   void handleRoot();
+  void handleFirmwarePage();
+  void handleFirmwarePost();
+  void handleFirmwareUpload();
   void handleConfigJson();
   void handleDataJson();
   void handleDayPlotJson();
