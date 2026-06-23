@@ -23,6 +23,7 @@
 
 #include "AppConfig.h"
 #include "AppWebServer.h"
+#include "DebugLog.h"
 #include "WaterData.h"
 #include "WaterHistory.h"
 #include "WaterMeter.h"
@@ -105,8 +106,8 @@ static void setupNtp() {
     return;
   }
   configTime(0, 0, appConfig.data().ntpServer);
-  Serial.print("NTP configured: ");
-  Serial.println(appConfig.data().ntpServer);
+  Debug.print("NTP configured: ");
+  Debug.println(appConfig.data().ntpServer);
 }
 
 static bool connectWifi() {
@@ -116,20 +117,20 @@ static bool connectWifi() {
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(appConfig.data().wifiSsid, appConfig.data().wifiPassword);
-  Serial.print("Connecting to WiFi ");
-  Serial.println(appConfig.data().wifiSsid);
+  Debug.print("Connecting to WiFi ");
+  Debug.println(appConfig.data().wifiSsid);
 
   for (uint8_t i = 0; i < 40; i++) {
     if (WiFi.status() == WL_CONNECTED) {
-      Serial.print("IP address: ");
-      Serial.println(WiFi.localIP());
+      Debug.print("IP address: ");
+      Debug.println(WiFi.localIP().toString());
       return true;
     }
     digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
     delay(250);
-    Serial.print(".");
+    Debug.print(".");
   }
-  Serial.println();
+  Debug.println();
   return false;
 }
 
@@ -138,25 +139,25 @@ static void startSetupAp() {
   WiFi.mode(WIFI_AP);
   WiFi.softAP(SETUP_AP_NAME);
   dnsServer.start(53, "*", WiFi.softAPIP());
-  Serial.print("Setup AP started: ");
-  Serial.print(SETUP_AP_NAME);
-  Serial.print(" at ");
-  Serial.println(WiFi.softAPIP());
+  Debug.print("Setup AP started: ");
+  Debug.print(SETUP_AP_NAME);
+  Debug.print(" at ");
+  Debug.println(WiFi.softAPIP().toString());
 }
 
 static void setupOTA() {
   ArduinoOTA.setHostname(ESP_NAME);
   ArduinoOTA.onStart([]() {
-    Serial.println("OTA update started");
+    Debug.println("OTA update started");
   });
   ArduinoOTA.onEnd([]() {
-    Serial.println("\nOTA update finished");
+    Debug.println("\nOTA update finished");
   });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    Serial.printf("OTA progress: %u%%\r", (progress / (total / 100)));
+    Debug.printf("OTA progress: %u%%\r", (progress / (total / 100)));
   });
   ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("OTA error[%u]\n", error);
+    Debug.printf("OTA error[%u]\n", error);
   });
   ArduinoOTA.begin();
 }
@@ -205,7 +206,7 @@ static bool mqttConnect() {
   if (connected) {
     mqttClient.publish(onlineTopic.c_str(), "true", appConfig.data().mqttRetain);
     mqttClient.publish(topic("ip").c_str(), WiFi.localIP().toString().c_str(), appConfig.data().mqttRetain);
-    Serial.println("MQTT connected");
+    Debug.println("MQTT connected");
     haDiscoveryPublished = false;
   }
   return connected;
@@ -290,7 +291,7 @@ static void publishHomeAssistantDiscovery() {
   publishHaBinarySensor("alarm_dry", "Water alarm dry", "{{ 'true' if value_json.alarms.dry else 'false' }}");
   publishHaBinarySensor("alarm_reverse", "Water alarm reverse", "{{ 'true' if value_json.alarms.reverse else 'false' }}");
   haDiscoveryPublished = true;
-  Serial.println("Home Assistant discovery published");
+  Debug.println("Home Assistant discovery published");
 }
 
 static void publishWaterData() {
@@ -336,7 +337,7 @@ static void startRadioIfConfigured() {
 
   waterMeter.begin();
   radioStarted = true;
-  Serial.println("CC1101 receiver started");
+  Debug.println("CC1101 receiver started");
 }
 
 void setup() {
@@ -345,8 +346,8 @@ void setup() {
 
   Serial.begin(115200);
   delay(100);
-  Serial.println();
-  Serial.println("Multical 21 Reader booting");
+  Debug.println();
+  Debug.println("Multical 21 Reader booting");
 
   appConfig.begin();
   waterHistory.begin();
@@ -360,8 +361,9 @@ void setup() {
   }
 
   webServer.begin();
+  Debug.begin(appConfig.data().telnetDebugEnabled);
   startRadioIfConfigured();
-  Serial.println("Setup done");
+  Debug.println("Setup done");
 }
 
 void loop() {
@@ -372,6 +374,7 @@ void loop() {
   }
 
   webServer.handleClient();
+  Debug.loop();
   waterHistory.loop();
   startRadioIfConfigured();
 

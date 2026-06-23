@@ -28,6 +28,7 @@ Current firmware baseline:
 - Supports Home Assistant MQTT discovery for water totals, usage windows,
   temperatures, last frame age, and Multical alarm flags.
 - Supports browser firmware upload from `/firmware`.
+- Supports optional Telnet debug on port 23, enabled from the setup UI.
 - Tracks in-memory hourly and daily consumption history from the cumulative
   Multical 21 counter.
 - Persists graph history to LittleFS so charts can survive reboot.
@@ -51,6 +52,12 @@ Firmware update:
 2. Open `http://<device-ip>/firmware`.
 3. Upload the matching `.pio/build/<environment>/firmware.bin`.
 4. The device validates the image and restarts when the upload succeeds.
+
+Telnet debug:
+
+1. Enable `Telnet debug` in the setup UI and reboot.
+2. Connect with `telnet <device-ip> 23` or `nc <device-ip> 23`.
+3. Serial debug output is mirrored to the Telnet session.
 
 Fibaro Home Center can poll:
 

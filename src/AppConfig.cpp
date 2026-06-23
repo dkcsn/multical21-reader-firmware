@@ -1,9 +1,31 @@
 #include "AppConfig.h"
 #include <EEPROM.h>
 
-static const uint32_t CONFIG_MAGIC = 0x4D433233;
+static const uint32_t CONFIG_MAGIC = 0x4D433234;
+static const uint32_t LEGACY_CONFIG_MAGIC = 0x4D433233;
 static const size_t EEPROM_SIZE = 1024;
 static const int EEPROM_ADDRESS = 0;
+
+struct LegacyAppConfigData {
+  uint32_t magic;
+  char wifiSsid[33];
+  char wifiPassword[65];
+  bool ntpEnabled;
+  char ntpServer[65];
+  int16_t timezoneOffsetMinutes;
+  bool mqttEnabled;
+  bool mqttRetain;
+  bool mqttSecure;
+  bool homeAssistantDiscovery;
+  char homeAssistantPrefix[65];
+  char mqttHost[129];
+  uint16_t mqttPort;
+  char mqttUsername[65];
+  char mqttPassword[65];
+  char mqttBaseTopic[65];
+  uint8_t meterId[4];
+  uint8_t encryptionKey[16];
+};
 
 static int hexValue(char c) {
   if (c >= '0' && c <= '9') return c - '0';
@@ -54,7 +76,30 @@ bool AppConfig::begin() {
 
 bool AppConfig::load() {
   EEPROM.get(EEPROM_ADDRESS, config);
-  if (config.magic != CONFIG_MAGIC) {
+  if (config.magic == LEGACY_CONFIG_MAGIC) {
+    LegacyAppConfigData legacy;
+    EEPROM.get(EEPROM_ADDRESS, legacy);
+    setDefaults();
+    memcpy(config.wifiSsid, legacy.wifiSsid, sizeof(config.wifiSsid));
+    memcpy(config.wifiPassword, legacy.wifiPassword, sizeof(config.wifiPassword));
+    config.ntpEnabled = legacy.ntpEnabled;
+    memcpy(config.ntpServer, legacy.ntpServer, sizeof(config.ntpServer));
+    config.timezoneOffsetMinutes = legacy.timezoneOffsetMinutes;
+    config.mqttEnabled = legacy.mqttEnabled;
+    config.mqttRetain = legacy.mqttRetain;
+    config.mqttSecure = legacy.mqttSecure;
+    config.homeAssistantDiscovery = legacy.homeAssistantDiscovery;
+    memcpy(config.homeAssistantPrefix, legacy.homeAssistantPrefix, sizeof(config.homeAssistantPrefix));
+    memcpy(config.mqttHost, legacy.mqttHost, sizeof(config.mqttHost));
+    config.mqttPort = legacy.mqttPort;
+    memcpy(config.mqttUsername, legacy.mqttUsername, sizeof(config.mqttUsername));
+    memcpy(config.mqttPassword, legacy.mqttPassword, sizeof(config.mqttPassword));
+    memcpy(config.mqttBaseTopic, legacy.mqttBaseTopic, sizeof(config.mqttBaseTopic));
+    memcpy(config.meterId, legacy.meterId, sizeof(config.meterId));
+    memcpy(config.encryptionKey, legacy.encryptionKey, sizeof(config.encryptionKey));
+    config.telnetDebugEnabled = false;
+    save();
+  } else if (config.magic != CONFIG_MAGIC) {
     setDefaults();
     save();
     return false;
@@ -154,6 +199,7 @@ void AppConfig::setDefaults() {
   config.mqttRetain = true;
   config.mqttSecure = false;
   config.homeAssistantDiscovery = false;
+  config.telnetDebugEnabled = false;
   strncpy(config.homeAssistantPrefix, "homeassistant", sizeof(config.homeAssistantPrefix) - 1);
   config.mqttPort = 1883;
   strncpy(config.mqttBaseTopic, "watermeter", sizeof(config.mqttBaseTopic) - 1);

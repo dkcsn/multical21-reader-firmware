@@ -139,6 +139,8 @@ void AppWebServer::handleRoot() {
   body += history.wasLoaded() ? F("Loaded from flash") : F("New session");
   body += F("</dd><dt>Time sync</dt><dd>");
   body += history.isTimeSynced() ? F("NTP synced") : F("Waiting for NTP");
+  body += F("</dd><dt>Telnet debug</dt><dd>");
+  body += cfg.telnetDebugEnabled ? F("Enabled on port 23") : F("Disabled");
   body += F("</dd></dl></section>");
 
   body += F("<section><h2>Hourly water use</h2>");
@@ -212,6 +214,11 @@ void AppWebServer::handleRoot() {
   body += F("<label>HA discovery prefix<input name=\"homeAssistantPrefix\" value=\"");
   body += htmlEscape(cfg.homeAssistantPrefix);
   body += F("\"></label>");
+  body += F("<label>Telnet debug<select name=\"telnetDebugEnabled\"><option value=\"1\"");
+  body += cfg.telnetDebugEnabled ? F(" selected") : F("");
+  body += F(">Enabled</option><option value=\"0\"");
+  body += !cfg.telnetDebugEnabled ? F(" selected") : F("");
+  body += F(">Disabled</option></select></label>");
   body += F("<label>Meter serial hex<input name=\"meterSerial\" value=\"");
   body += htmlEscape(config.meterSerialHex());
   body += F("\" maxlength=\"8\"></label>");
@@ -319,6 +326,8 @@ void AppWebServer::handleConfigJson() {
   json += cfg.mqttSecure ? F("true") : F("false");
   json += F(",\"homeAssistantDiscovery\":");
   json += cfg.homeAssistantDiscovery ? F("true") : F("false");
+  json += F(",\"telnetDebugEnabled\":");
+  json += cfg.telnetDebugEnabled ? F("true") : F("false");
   json += F(",\"homeAssistantPrefix\":\"");
   json += cfg.homeAssistantPrefix;
   json += F("\",\"mqttHost\":\"");
@@ -497,6 +506,7 @@ void AppWebServer::handleSave() {
   cfg.mqttRetain = server.arg("mqttRetain") == "1";
   cfg.mqttSecure = server.arg("mqttSecure") == "1";
   cfg.homeAssistantDiscovery = server.arg("homeAssistantDiscovery") == "1";
+  cfg.telnetDebugEnabled = server.arg("telnetDebugEnabled") == "1";
   copyArg(cfg.homeAssistantPrefix, sizeof(cfg.homeAssistantPrefix), server.arg("homeAssistantPrefix"));
   if (strlen(cfg.homeAssistantPrefix) == 0) {
     strncpy(cfg.homeAssistantPrefix, "homeassistant", sizeof(cfg.homeAssistantPrefix) - 1);

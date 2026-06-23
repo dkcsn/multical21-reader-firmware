@@ -14,6 +14,7 @@
 
 
 #include "WMbusFrame.h"
+#include "DebugLog.h"
 
 WMBusFrame::WMBusFrame(const uint8_t meterId[4], const uint8_t key[16])
 {
@@ -83,10 +84,10 @@ void WMBusFrame::parseMeterInfo(uint8_t *data, size_t len, WaterData& waterData)
   waterData.lastFrameMillis = millis();
   waterData.valid = true;
 
-  Serial.printf("CurrentValue: %d.%03d m3 - ", tt/1000, tt%1000);
-  Serial.printf("MonthStartValue: %d.%03d m3 - ", tg/1000, tg%1000);
-  Serial.printf("WaterTemp: %d C - ", waterData.waterTemperatureC);
-  Serial.printf("RoomTemp: %d C\n\r", waterData.ambientTemperatureC);
+  Debug.printf("CurrentValue: %d.%03d m3 - ", tt/1000, tt%1000);
+  Debug.printf("MonthStartValue: %d.%03d m3 - ", tg/1000, tg%1000);
+  Debug.printf("WaterTemp: %d C - ", waterData.waterTemperatureC);
+  Debug.printf("RoomTemp: %d C\n\r", waterData.ambientTemperatureC);
 }
 
 void WMBusFrame::decode(WaterData& waterData)
