@@ -41,6 +41,16 @@ static void debugHexPrefix(const char* label, const uint8_t* data, uint8_t len, 
   Debug.println();
 }
 
+static int findWmbusSync(const uint8_t* data, uint8_t len)
+{
+  for (uint8_t i = 0; i + 2 < len; i++) {
+    if (data[i] == 0x54 && data[i + 1] == 0x3D) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 // ChipSelect assert
 inline void WaterMeter::selectCC1101(void)
 {
@@ -336,43 +346,58 @@ void WaterMeter::receive(WMBusFrame * frame, WaterData& waterData)
   uint8_t rssi = readReg(CC1101_RSSI, CC1101_STATUS_REGISTER);
   waterData.radioRssiDbm = rssiToDbm(rssi);
   waterData.radioRssiValid = true;
-  Debug.printf("CC1101 RX FIFO before read: %u bytes%s\n\r",
-               rxBytesBefore & 0x7F, (rxBytesBefore & 0x80) ? " overflow" : "");
-
-  // read preamble, should be 0x543D
-  uint8_t p1 = readByteFromFifo();
-  uint8_t p2 = readByteFromFifo();
-  //Serial.printf("%02x%02x", p1, p2);
-
-  uint8_t payloadLength = readByteFromFifo();
-  Debug.printf("WMBus raw header: preamble 0x%02X%02X length %u\n\r", p1, p2, payloadLength);
-
-  // is it Mode C1, frame B and does it fit in the buffer
-  if ( (payloadLength < WMBusFrame::MAX_LENGTH )
-       && (p1 == 0x54) && (p2 == 0x3D) )
-  { 
-    // 3rd byte is payload length
-    frame->length = payloadLength;
-
-    //Serial.printf("%02X", lfield);
-
-    // starting with 1! index 0 is lfield
-    for (int i = 0; i < payloadLength; i++)
-    {
-	    frame->payload[i] = readByteFromFifo();
-    }
-    debugHexPrefix("WMBus payload prefix:", frame->payload, payloadLength, 24);
-
-    // do some checks: my meterId, crc ok
-    frame->decode(waterData);
-  } else {
-    if (p1 != 0x54 || p2 != 0x3D) {
-      Debug.println("WMBus rejected before decode: unexpected preamble");
-    }
-    if (payloadLength >= WMBusFrame::MAX_LENGTH) {
-      Debug.println("WMBus rejected before decode: payload too long");
-    }
+  const bool fifoOverflow = (rxBytesBefore & 0x80) != 0;
+  uint8_t fifoBytes = rxBytesBefore & 0x7F;
+  if (fifoBytes > 64) {
+    fifoBytes = 64;
   }
+  Debug.printf("CC1101 RX FIFO before read: %u bytes%s\n\r",
+               fifoBytes, fifoOverflow ? " overflow" : "");
+
+  if (fifoBytes < 3) {
+    Debug.println("WMBus rejected before decode: RX FIFO too short");
+    startReceiver();
+    return;
+  }
+
+  uint8_t raw[64];
+  for (uint8_t i = 0; i < fifoBytes; i++) {
+    raw[i] = readByteFromFifo();
+  }
+  debugHexPrefix("CC1101 FIFO prefix:", raw, fifoBytes, 32);
+
+  int syncOffset = findWmbusSync(raw, fifoBytes);
+  if (syncOffset < 0) {
+    Debug.println("WMBus rejected before decode: sync 0x543D not found in FIFO");
+    startReceiver();
+    return;
+  }
+
+  if (syncOffset > 0) {
+    Debug.printf("WMBus sync found at FIFO offset %d after noise/overflow\n\r", syncOffset);
+  }
+
+  uint8_t payloadLength = raw[syncOffset + 2];
+  Debug.printf("WMBus raw header: preamble 0x%02X%02X length %u\n\r",
+               raw[syncOffset], raw[syncOffset + 1], payloadLength);
+
+  if (payloadLength >= WMBusFrame::MAX_LENGTH) {
+    Debug.println("WMBus rejected before decode: payload too long");
+    startReceiver();
+    return;
+  }
+
+  if ((uint16_t) syncOffset + 3 + payloadLength > fifoBytes) {
+    Debug.printf("WMBus rejected before decode: incomplete FIFO frame need %u bytes got %u\n\r",
+                 (unsigned) (syncOffset + 3 + payloadLength), fifoBytes);
+    startReceiver();
+    return;
+  }
+
+  frame->length = payloadLength;
+  memcpy(frame->payload, raw + syncOffset + 3, payloadLength);
+  debugHexPrefix("WMBus payload prefix:", frame->payload, payloadLength, 24);
+  frame->decode(waterData);
 
   // flush RX fifo and restart receiver
   startReceiver();
