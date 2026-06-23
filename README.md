@@ -1,5 +1,15 @@
 # esp-multical21
 
+## New project direction
+
+This repository is being shaped into an AMS Reader inspired firmware for
+Kamstrup Multical 21 water meters: WiFi onboarding, browser configuration,
+runtime entry of meter serial and AES key, water usage graphs, MQTT/Home
+Assistant integration, and OTA updates.
+
+See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the current architecture and
+milestone plan.
+
 Added MQTT data upload to the project from weetmuts original the values was only send to the serial terminal.
 And how the data is written to the serial terminal.
 
