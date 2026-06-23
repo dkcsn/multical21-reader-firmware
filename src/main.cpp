@@ -109,11 +109,12 @@ static void setupNtp() {
   if (!appConfig.data().ntpEnabled || WiFi.status() != WL_CONNECTED) {
     return;
   }
-  configTime(0, 0, appConfig.data().ntpServer);
+  const char* primaryServer = strlen(appConfig.data().ntpServer) > 0 ? appConfig.data().ntpServer : "pool.ntp.org";
+  configTime(0, 0, primaryServer, "pool.ntp.org", "time.google.com");
   lastNtpAttempt = millis();
   ntpConfigured = true;
   Debug.print("NTP configured: ");
-  Debug.println(appConfig.data().ntpServer);
+  Debug.println(primaryServer);
 }
 
 static bool isNtpSynced() {

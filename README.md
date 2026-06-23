@@ -24,8 +24,8 @@ Current firmware baseline:
   top bar.
 - Stores configuration in EEPROM instead of requiring a local `credentials.h`.
 - Supports NTP time sync for calendar-aligned graph buckets.
-- Retries NTP sync after WiFi connect and reports real system time sync status
-  in the UI.
+- Retries NTP sync after WiFi connect, uses fallback NTP servers, and reports
+  real system time sync status in the UI and `/data.json`.
 - Shows hourly and daily water graphs with total and peak summaries.
 - Publishes decoded water meter state to MQTT as JSON when MQTT is enabled.
 - Supports MQTT retain and secure MQTT/TLS mode. TLS currently uses an insecure
