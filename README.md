@@ -18,8 +18,8 @@ Current firmware baseline:
 - Provides captive portal redirects for common Android, iOS, Windows, and
   browser connectivity checks.
 - Supports WiFi scan and WiFi credential test from the setup UI.
-- Serves an AMS-style browser dashboard on port 80 for water status, graphs,
-  WiFi, MQTT, tools, meter serial, and AES key setup.
+- Serves AMS-style pages on port 80: dashboard `/`, setup `/setup`, graphs
+  `/graphs`, firmware upload `/firmware`.
 - Stores configuration in EEPROM instead of requiring a local `credentials.h`.
 - Supports NTP time sync for calendar-aligned graph buckets.
 - Shows hourly and daily water graphs with total and peak summaries.

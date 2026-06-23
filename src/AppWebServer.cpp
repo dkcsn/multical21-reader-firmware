@@ -596,7 +596,7 @@ void AppWebServer::handleWifiTestJson() {
 }
 
 void AppWebServer::handleCaptiveRedirect() {
-  server.sendHeader("Location", "/", true);
+  server.sendHeader("Location", "/setup", true);
   server.send(302, "text/plain", "Multical 21 Reader setup");
 }
 
@@ -678,6 +678,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("<title>Multical 21 Reader</title><style>");
   html += F("body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#eef3f7;color:#111827}");
   html += F("header{background:#12344d;color:white;padding:18px 20px;border-bottom:4px solid #0b7285}main{max-width:980px;margin:0 auto;padding:18px}");
+  html += F("nav{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}nav a{color:white;text-decoration:none;border:1px solid #486581;border-radius:6px;padding:7px 10px;font-weight:700;font-size:13px}");
   html += F("section{background:white;border:1px solid #d9e2ec;border-radius:8px;padding:16px;margin:0 0 16px}");
   html += F("h1{font-size:24px;margin:0}h2{font-size:18px;margin:0 0 12px}dl{display:grid;grid-template-columns:160px 1fr;gap:8px;margin:0}");
   html += F("dt{color:#52606d}dd{margin:0;font-weight:600}form{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}");
@@ -693,7 +694,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F(".bars{height:180px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden;background:linear-gradient(to top,#f8fafc,#fff)}");
   html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0;min-height:1px}.barwrap:nth-child(2n) .bar{background:#147d64}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
   html += F("@media(max-width:640px){main{padding:12px}.hero{grid-template-columns:1fr}.hero h2{font-size:24px}dl{grid-template-columns:1fr}.heroMeter strong{font-size:30px}}");
-  html += F("</style></head><body><header><h1>Multical 21 Reader</h1></header><main>");
+  html += F("</style></head><body><header><h1>Multical 21 Reader</h1><nav><a href=\"/\">Dashboard</a><a href=\"/setup\">Setup</a><a href=\"/graphs\">Graphs</a><a href=\"/firmware\">Firmware</a></nav></header><main>");
   html += body;
   html += F("</main><script>");
   html += F("async function scanWifi(){const r=document.getElementById('wifiResult'),l=document.getElementById('wifiList');r.textContent='Scanning...';l.innerHTML='';try{const j=await (await fetch('/wifiscan.json')).json();r.textContent=j.networks.length+' networks';j.networks.forEach(n=>{const d=document.createElement('div');d.className='wifiNet';d.innerHTML='<strong></strong><small></small>';d.querySelector('strong').textContent=n.ssid||'(hidden)';d.querySelector('small').textContent=n.rssi+' dBm ch '+n.channel+(n.secure?' secure':' open');d.onclick=()=>{document.getElementById('wifiSsid').value=n.ssid};l.appendChild(d)})}catch(e){r.textContent='Scan failed'}}");
