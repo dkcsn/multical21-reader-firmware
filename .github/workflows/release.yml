@@ -35,7 +35,7 @@ jobs:
           BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 
           export PLATFORMIO_BUILD_FLAGS="-D FW_VERSION=\\\"${VERSION}\\\" -D FW_GIT_SHA=\\\"${SHORT_SHA}\\\" -D FW_BUILD_DATE=\\\"${BUILD_DATE}\\\""
-          platformio run
+          platformio run -e esp32 -e esp8266 -e esp8266_lite
 
           mkdir -p dist
           cp .pio/build/esp32/firmware.bin "dist/multical21-reader-${VERSION}-esp32.bin"
