@@ -302,8 +302,6 @@ void AppWebServer::handleRoot() {
   body += F("</small></article>");
   body += F("</section>");
 
-  body += F("<section><h2>Graphs</h2><dl><dt>Water usage</dt><dd><a class=\"buttonLink\" href=\"/graphs\">Open graphs</a></dd></dl></section>");
-
   body += F("<section><h2>Fibaro / local API</h2><dl>");
   body += F("<dt>State JSON</dt><dd><code>http://");
   body += htmlEscape(deviceIp);
