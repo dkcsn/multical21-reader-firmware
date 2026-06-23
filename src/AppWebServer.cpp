@@ -58,7 +58,63 @@ static String systemTimeEpochString() {
   return now >= 1600000000 ? String((uint32_t) now) : String("not synced");
 }
 
-static String graphBars(WaterHistory& history, bool days) {
+static time_t localTimeNow(int16_t timezoneOffsetMinutes) {
+  time_t now = time(nullptr);
+  if (now < 1600000000) {
+    return 0;
+  }
+  return now + ((time_t) timezoneOffsetMinutes * 60);
+}
+
+static String twoDigits(int value) {
+  return value < 10 ? String("0") + String(value) : String(value);
+}
+
+static String formatGraphLabel(time_t now, int8_t offset, bool days) {
+  if (now == 0) {
+    return offset == 0 ? String("now") : String(offset);
+  }
+
+  time_t point = now - ((time_t) offset * (days ? 86400 : 3600));
+  struct tm* tm = gmtime(&point);
+  if (tm == nullptr) {
+    return offset == 0 ? String("now") : String(offset);
+  }
+
+  if (days) {
+    return twoDigits(tm->tm_mday) + String("/") + twoDigits(tm->tm_mon + 1);
+  }
+  return twoDigits(tm->tm_hour) + String(":00");
+}
+
+static String formatGraphTitle(time_t now, bool days) {
+  if (now == 0) {
+    return days ? String("Last 31 days") : String("Last 24 hours");
+  }
+
+  time_t start = now - ((time_t) (days ? 30 : 23) * (days ? 86400 : 3600));
+  struct tm* startTm = gmtime(&start);
+  struct tm startCopy;
+  if (startTm == nullptr) {
+    return days ? String("Last 31 days") : String("Last 24 hours");
+  }
+  startCopy = *startTm;
+  struct tm* endTm = gmtime(&now);
+  if (endTm == nullptr) {
+    return days ? String("Last 31 days") : String("Last 24 hours");
+  }
+
+  if (days) {
+    return twoDigits(startCopy.tm_mday) + String("/") + twoDigits(startCopy.tm_mon + 1) + String("/") + String(startCopy.tm_year + 1900)
+         + String(" - ") + twoDigits(endTm->tm_mday) + String("/") + twoDigits(endTm->tm_mon + 1) + String("/") + String(endTm->tm_year + 1900);
+  }
+  return twoDigits(startCopy.tm_mday) + String("/") + twoDigits(startCopy.tm_mon + 1) + String(" ")
+       + twoDigits(startCopy.tm_hour) + String(":00 - ")
+       + twoDigits(endTm->tm_mday) + String("/") + twoDigits(endTm->tm_mon + 1) + String(" ")
+       + twoDigits(endTm->tm_hour) + String(":00");
+}
+
+static String graphBars(WaterHistory& history, bool days, time_t now) {
   const uint8_t count = days ? 31 : 24;
   uint32_t maxValue = 0;
   uint32_t totalValue = 0;
@@ -79,15 +135,16 @@ static String graphBars(WaterHistory& history, bool days) {
   out += F(" m3</strong></span></div><div class=\"bars\">");
   for (int8_t i = count - 1; i >= 0; i--) {
     uint32_t value = days ? history.getDayMilliM3(i) : history.getHourMilliM3(i);
-    uint8_t height = maxValue == 0 ? 0 : (uint8_t) max(6UL, (unsigned long) value * 100UL / maxValue);
+    uint8_t height = value == 0 || maxValue == 0 ? 0 : (uint8_t) max(6UL, (unsigned long) value * 100UL / maxValue);
+    String label = formatGraphLabel(now, i, days);
     out += F("<div class=\"barwrap\" title=\"");
-    out += i == 0 ? String("now") : String(i) + (days ? String(" days ago") : String(" hours ago"));
+    out += label;
     out += F(": ");
     out += formatM3(value);
     out += F(" m3\"><div class=\"bar\" style=\"height:");
     out += height;
     out += F("%\"></div><span>");
-    out += i == 0 ? F("now") : String(i);
+    out += label;
     out += F("</span><small>");
     out += formatM3(value);
     out += F("</small></div>");
@@ -307,11 +364,16 @@ void AppWebServer::handleSetupPage() {
 }
 
 void AppWebServer::handleGraphsPage() {
+  time_t now = localTimeNow(config.data().timezoneOffsetMinutes);
   String body;
-  body += F("<section class=\"graphPanel\"><div class=\"sectionHead\"><h2>Hourly water use</h2><span>Last 24 hours</span></div>");
-  body += graphBars(history, false);
-  body += F("</section><section class=\"graphPanel\"><div class=\"sectionHead\"><h2>Daily water use</h2><span>Last 31 days</span></div>");
-  body += graphBars(history, true);
+  body += F("<section class=\"graphPanel\"><div class=\"sectionHead\"><h2>Hourly water use</h2><span>");
+  body += formatGraphTitle(now, false);
+  body += F("</span></div>");
+  body += graphBars(history, false, now);
+  body += F("</section><section class=\"graphPanel\"><div class=\"sectionHead\"><h2>Daily water use</h2><span>");
+  body += formatGraphTitle(now, true);
+  body += F("</span></div>");
+  body += graphBars(history, true, now);
   body += F("</section>");
   sendHtml(body);
 }
@@ -689,7 +751,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F(".setupPanel{border-left:5px solid #0b7285}.setupForm{display:block}.formSection{border-top:1px solid #d9e2ec;padding-top:14px;margin-top:14px}.formSection:first-of-type{border-top:0;padding-top:0}.formSection h3{font-size:15px;margin:0 0 10px;color:#102a43}.formGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.actionRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.actionRow form{display:block}.actionRow button{min-width:170px}.statusLine{border:1px solid #d9e2ec;border-radius:6px;padding:10px;background:#f8fafc;display:grid;gap:4px;color:#52606d}.statusLine strong{color:#102a43}.statusLine small{font-size:12px;color:#627d98}.deviceActions{padding-bottom:0}.onboardingPanel{border-color:#0b7285;background:#f8fcfd}.onboardingPanel .sectionHead h2{font-size:24px}");
   html += F(".wifiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.wifiActions span{font-size:13px;color:#334e68}.wifiList{grid-column:1/-1;display:grid;gap:6px}.wifiNet{display:flex;justify-content:space-between;gap:10px;border:1px solid #d9e2ec;border-radius:6px;padding:8px;background:#f8fafc;cursor:pointer}.wifiNet small{color:#52606d}");
   html += F(".bars{height:180px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden;background:linear-gradient(to top,#f8fafc,#fff)}");
-  html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0;min-height:1px}.barwrap:nth-child(2n) .bar{background:#147d64}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
+  html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0}.barwrap:nth-child(2n) .bar{background:#147d64}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
   html += F("@media(max-width:640px){main{padding:12px}.hero{grid-template-columns:1fr}.hero h2{font-size:24px}dl{grid-template-columns:1fr}.heroMeter strong{font-size:30px}}");
   html += F("</style></head><body><header><h1>Multical 21 Reader</h1><nav>");
   html += F("<span class=\"statusPill ");
