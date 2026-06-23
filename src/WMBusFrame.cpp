@@ -238,6 +238,24 @@ void WMBusFrame::parseMeterInfo(uint8_t *data, size_t len, WaterData& waterData)
     return;
   }
 
+  if (data[2] == 0x79 && len >= 17 && len < 19) {
+    uint32_t tt = readLe32(data, 9);
+    waterData.totalMilliM3 = tt;
+    if (waterData.monthStartMilliM3 == 0 || waterData.monthStartMilliM3 > tt) {
+      waterData.monthStartMilliM3 = tt;
+    }
+    waterData.waterTemperatureC = (int8_t) data[15];
+    waterData.ambientTemperatureC = (int8_t) data[16];
+    applyStatus(data[7], waterData);
+    waterData.lastFrameMillis = millis();
+    waterData.valid = true;
+
+    Debug.printf("Compact 0x79 short: CurrentValue: %d.%03d m3 - ", tt/1000, tt%1000);
+    Debug.printf("WaterTemp: %d C - ", waterData.waterTemperatureC);
+    Debug.printf("RoomTemp: %d C\n\r", waterData.ambientTemperatureC);
+    return;
+  }
+
   if (data[2] == 0x79) // compact frame
   {
     pos_tt = 9;
