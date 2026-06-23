@@ -457,30 +457,30 @@ void AppWebServer::handleRoot() {
   }
   body += F("<section class=\"hero\"><div><p class=\"eyebrow\">Kamstrup Multical 21</p><h2>Water reader dashboard</h2><p class=\"heroText\">");
   body += waterData.valid ? F("Live water meter data is being decoded and stored locally.") : F("Waiting for the first valid wireless M-Bus frame.");
-  body += F("</p></div><div class=\"heroMeter\"><span>Total</span><strong>");
+  body += F("</p></div><div class=\"heroMeter\"><span>Total</span><strong id=\"heroTotal\">");
   body += waterData.valid ? String(waterData.totalM3(), 3) : String("--");
   body += F("</strong><small>m3</small></div></section>");
 
   body += F("<section class=\"cards\">");
-  body += F("<article class=\"card accentRx\"><div class=\"cardTop\"><span>Multical RX</span><b class=\"chip ");
+  body += F("<article class=\"card accentRx\"><div class=\"cardTop\"><span>Multical RX</span><b id=\"rxChip\" class=\"chip ");
   body += radioLive ? F("ok\">Live") : (waterData.valid ? F("warn\">Stale") : F("off\">Waiting"));
-  body += F("</b></div><strong>");
+  body += F("</b></div><strong id=\"rxAge\">");
   body += waterData.valid ? String(frameAgeSeconds) + String(" s") : String("--");
   body += F("</strong><small>Last wireless M-Bus frame</small></article>");
 
-  body += F("<article class=\"card accentWater\"><div class=\"cardTop\"><span>Water</span><b class=\"chip ");
+  body += F("<article class=\"card accentWater\"><div class=\"cardTop\"><span>Water</span><b id=\"waterChip\" class=\"chip ");
   body += waterData.valid ? F("ok\">Live") : F("warn\">Waiting");
-  body += F("</b></div><strong>");
+  body += F("</b></div><strong><span id=\"waterTotal\">");
   body += waterData.valid ? String(waterData.totalM3(), 3) : String("--");
-  body += F(" m3</strong><small>Month ");
+  body += F("</span> m3</strong><small>Month <span id=\"monthUsage\">");
   body += waterData.valid ? String(waterData.monthUsageM3(), 3) + String(" m3") : String("-");
-  body += F("</small></article>");
+  body += F("</span></small></article>");
 
-  body += F("<article class=\"card accentUsage\"><div class=\"cardTop\"><span>Usage</span><b class=\"chip ok\">History</b></div><strong>");
+  body += F("<article class=\"card accentUsage\"><div class=\"cardTop\"><span>Usage</span><b class=\"chip ok\">History</b></div><strong><span id=\"todayUsage\">");
   body += formatM3(history.getTodayMilliM3());
-  body += F(" m3</strong><small>Today, ");
+  body += F("</span> m3</strong><small>Today, <span id=\"last24Usage\">");
   body += formatM3(history.getLast24HoursMilliM3());
-  body += F(" m3 last 24h</small></article>");
+  body += F("</span> m3 last 24h</small></article>");
 
   body += F("<article class=\"card accentMqtt\"><div class=\"cardTop\"><span>MQTT</span><b class=\"chip ");
   body += cfg.mqttEnabled ? F("ok\">Enabled") : F("off\">Disabled");
@@ -492,11 +492,11 @@ void AppWebServer::handleRoot() {
 
   body += F("<article class=\"card accentMeter\"><div class=\"cardTop\"><span>Meter</span><b class=\"chip ");
   body += config.hasMeter() ? F("ok\">Configured") : F("warn\">Missing");
-  body += F("</b></div><strong>");
+  body += F("</b></div><strong><span id=\"waterTemp\">");
   body += waterData.valid ? String(waterData.waterTemperatureC) + String(" C") : String("--");
-  body += F("</strong><small>Water temp, room ");
+  body += F("</span></strong><small>Water temp, room <span id=\"roomTemp\">");
   body += waterData.valid ? String(waterData.ambientTemperatureC) + String(" C") : String("--");
-  body += F("</small></article>");
+  body += F("</span></small></article>");
 
   body += F("<article class=\"card accentVersion\"><div class=\"cardTop\"><span>Version</span><b class=\"chip ok\">");
   body += htmlEscape(firmwareBoardName());
@@ -666,6 +666,7 @@ void AppWebServer::handleConfigJson() {
 }
 
 void AppWebServer::handleDataJson() {
+  const AppConfigData& cfg = config.data();
   String json;
   json.reserve(500);
   json += F("{\"valid\":");
@@ -692,6 +693,8 @@ void AppWebServer::handleDataJson() {
   json += history.wasLoaded() ? F("true") : F("false");
   json += F(",\"time_synced\":");
   json += systemTimeSynced() ? F("true") : F("false");
+  json += F(",\"ntp_enabled\":");
+  json += cfg.ntpEnabled ? F("true") : F("false");
   json += F(",\"time_epoch\":");
   json += systemTimeSynced() ? String((uint32_t) time(nullptr)) : F("null");
   json += F(",\"water_temperature_c\":");
@@ -931,19 +934,19 @@ void AppWebServer::sendHtml(const String& body) {
   html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0}.barwrap:nth-child(2n) .bar{background:#147d64}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
   html += F("@media(max-width:980px){header{grid-template-columns:1fr}.topRight{grid-template-columns:1fr}.statusGroup,.navLinks{justify-content:flex-start;flex-wrap:wrap}.statusGroup{overflow:visible}}@media(max-width:640px){main{padding:12px}.hero{grid-template-columns:1fr}.hero h2{font-size:24px}dl{grid-template-columns:1fr}.heroMeter strong{font-size:30px}nav a span{display:none}.statusText{max-width:96px}}");
   html += F("</style></head><body><header><h1>Multical 21 Reader</h1><nav class=\"topRight\"><div class=\"statusGroup\">");
-  html += F("<span class=\"statusPill ");
+  html += F("<span id=\"topFramePill\" class=\"statusPill ");
   html += radioLive ? F("statusOk") : (waterData.valid ? F("statusWarn") : F("statusOff"));
-  html += F("\" title=\"Latest Multical wireless M-Bus frame\"><span class=\"statusDot\"></span><span class=\"statusText\">");
+  html += F("\" title=\"Latest Multical wireless M-Bus frame\"><span class=\"statusDot\"></span><span id=\"topFrameText\" class=\"statusText\">");
   html += radioLive ? F("Frame live") : (waterData.valid ? String("Frame ") + String(frameAgeSeconds) + String("s") : String("No frame"));
   html += F("</span></span>");
-  html += F("<span class=\"statusPill ");
+  html += F("<span id=\"topSignalPill\" class=\"statusPill ");
   html += radioRssiClass(waterData);
-  html += F("\" title=\"CC1101 received signal strength\"><span class=\"statusDot\"></span><span class=\"statusText\">");
+  html += F("\" title=\"CC1101 received signal strength\"><span class=\"statusDot\"></span><span id=\"topSignalText\" class=\"statusText\">");
   html += waterData.radioRssiValid ? String("Signal ") + String(waterData.radioRssiDbm) : String("Signal --");
   html += F("</span></span>");
-  html += F("<span class=\"statusPill ");
+  html += F("<span id=\"topDataPill\" class=\"statusPill ");
   html += meterStatusClass(waterData);
-  html += F("\" title=\"Meter status from Multical alarm bits\"><span class=\"statusDot\"></span><span class=\"statusText\">");
+  html += F("\" title=\"Meter status from Multical alarm bits\"><span class=\"statusDot\"></span><span id=\"topDataText\" class=\"statusText\">");
   html += waterData.valid ? htmlEscape(meterStatusText(waterData)) : String("No data");
   html += F("</span></span>");
   html += F("<span class=\"statusPill ");
@@ -953,11 +956,11 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("\"><span class=\"statusDot\"></span><span class=\"statusText\">");
   html += wifiConnected ? htmlEscape(cfg.wifiSsid) : String("Setup AP");
   html += F("</span></span>");
-  html += F("<span class=\"statusPill ");
+  html += F("<span id=\"topTimePill\" class=\"statusPill ");
   html += ntpSynced ? F("statusOk") : (cfg.ntpEnabled ? F("statusWarn") : F("statusOff"));
   html += F("\" title=\"");
   html += cfg.ntpEnabled ? htmlEscape(cfg.ntpServer) : String("NTP disabled");
-  html += F("\"><span class=\"statusDot\"></span><span class=\"statusText\">");
+  html += F("\"><span class=\"statusDot\"></span><span id=\"topTimeText\" class=\"statusText\">");
   html += ntpSynced ? F("Time OK") : (cfg.ntpEnabled ? F("Time wait") : F("Time off"));
   html += F("</span></span></div><div class=\"navLinks\">");
   html += F("<a href=\"/\" title=\"Dashboard\"><svg viewBox=\"0 0 24 24\"><path d=\"M3 12l9-9 9 9\"></path><path d=\"M5 10v10h14V10\"></path></svg><span>Dashboard</span></a>");
@@ -967,6 +970,8 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("</div></nav></header><main>");
   html += body;
   html += F("</main><script>");
+  html += F("function byId(i){return document.getElementById(i)}function txt(i,v){const e=byId(i);if(e)e.textContent=v}function pill(i,c){const e=byId(i);if(e)e.className='statusPill '+c}function chip(i,c,t){const e=byId(i);if(e){e.className='chip '+c;e.textContent=t}}function rssiClass(v){if(v===null||v===undefined)return'statusOff';if(v>=-85)return'statusOk';if(v>=-100)return'statusWarn';return'statusAlarm'}");
+  html += F("async function refreshData(){if(!byId('topFrameText'))return;try{const j=await (await fetch('/data.json',{cache:'no-store'})).json();const age=j.last_frame_age_s;const live=j.valid&&age<90;const a=j.alarms||{};const alarm=a.burst||a.leak;const warn=a.dry||a.reverse;pill('topFramePill',live?'statusOk':(j.valid?'statusWarn':'statusOff'));txt('topFrameText',live?'Frame live':(j.valid?'Frame '+age+'s':'No frame'));pill('topSignalPill',rssiClass(j.radio_rssi_dbm));txt('topSignalText',j.radio_rssi_dbm===null?'Signal --':'Signal '+j.radio_rssi_dbm);pill('topDataPill',!j.valid?'statusOff':(alarm?'statusAlarm':(warn?'statusWarn':'statusOk')));txt('topDataText',j.valid?(j.meter_status||'Meter OK'):'No data');pill('topTimePill',j.time_synced?'statusOk':(j.ntp_enabled?'statusWarn':'statusOff'));txt('topTimeText',j.time_synced?'Time OK':(j.ntp_enabled?'Time wait':'Time off'));txt('heroTotal',j.valid?Number(j.total_m3).toFixed(3):'--');txt('rxAge',j.valid?age+' s':'--');chip('rxChip',live?'ok':(j.valid?'warn':'off'),live?'Live':(j.valid?'Stale':'Waiting'));txt('waterTotal',j.valid?Number(j.total_m3).toFixed(3):'--');txt('monthUsage',j.valid?Number(j.month_usage_m3).toFixed(3)+' m3':'-');chip('waterChip',j.valid?'ok':'warn',j.valid?'Live':'Waiting');txt('todayUsage',Number(j.today_m3).toFixed(3));txt('last24Usage',Number(j.last_24h_m3).toFixed(3));txt('waterTemp',j.valid?j.water_temperature_c+' C':'--');txt('roomTemp',j.valid?j.ambient_temperature_c+' C':'--')}catch(e){}}setInterval(refreshData,5000);refreshData();");
   html += F("async function scanWifi(){const r=document.getElementById('wifiResult'),l=document.getElementById('wifiList');r.textContent='Scanning...';l.innerHTML='';try{const j=await (await fetch('/wifiscan.json')).json();r.textContent=j.networks.length+' networks';j.networks.forEach(n=>{const d=document.createElement('div');d.className='wifiNet';d.innerHTML='<strong></strong><small></small>';d.querySelector('strong').textContent=n.ssid||'(hidden)';d.querySelector('small').textContent=n.rssi+' dBm ch '+n.channel+(n.secure?' secure':' open');d.onclick=()=>{document.getElementById('wifiSsid').value=n.ssid};l.appendChild(d)})}catch(e){r.textContent='Scan failed'}}");
   html += F("async function testWifi(){const r=document.getElementById('wifiResult');r.textContent='Testing...';const body=new URLSearchParams({ssid:document.getElementById('wifiSsid').value,password:document.getElementById('wifiPassword').value});try{const j=await (await fetch('/wifitest.json',{method:'POST',body})).json();r.textContent=j.ok?'Connected: '+j.ip:'Failed, status '+j.status}catch(e){r.textContent='Test failed'}}");
   html += F("</script></body></html>");
