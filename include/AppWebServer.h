@@ -12,21 +12,25 @@
 
 #include "AppConfig.h"
 #include "WaterData.h"
+#include "WaterHistory.h"
 
 class AppWebServer {
 public:
-  AppWebServer(AppConfig& config, WaterData& waterData);
+  AppWebServer(AppConfig& config, WaterData& waterData, WaterHistory& history);
   void begin();
   void handleClient();
 
 private:
   AppConfig& config;
   WaterData& waterData;
+  WaterHistory& history;
   DeviceWebServer server;
 
   void handleRoot();
   void handleConfigJson();
   void handleDataJson();
+  void handleDayPlotJson();
+  void handleMonthPlotJson();
   void handleSave();
   void handleReboot();
   void sendHtml(const String& body);

@@ -22,14 +22,48 @@ static void copyArg(char* dest, size_t len, const String& value) {
   dest[len - 1] = '\0';
 }
 
-AppWebServer::AppWebServer(AppConfig& config, WaterData& waterData)
-  : config(config), waterData(waterData), server(80) {
+static String formatM3(uint32_t milliM3) {
+  return String(milliM3 / 1000.0f, 3);
+}
+
+static String graphBars(WaterHistory& history, bool days) {
+  const uint8_t count = days ? 31 : 24;
+  uint32_t maxValue = 0;
+  for (uint8_t i = 0; i < count; i++) {
+    uint32_t value = days ? history.getDayMilliM3(i) : history.getHourMilliM3(i);
+    if (value > maxValue) {
+      maxValue = value;
+    }
+  }
+
+  String out;
+  out.reserve(days ? 2600 : 2200);
+  out += F("<div class=\"bars\">");
+  for (int8_t i = count - 1; i >= 0; i--) {
+    uint32_t value = days ? history.getDayMilliM3(i) : history.getHourMilliM3(i);
+    uint8_t height = maxValue == 0 ? 0 : (uint8_t) max(6UL, (unsigned long) value * 100UL / maxValue);
+    out += F("<div class=\"barwrap\"><div class=\"bar\" style=\"height:");
+    out += height;
+    out += F("%\"></div><span>");
+    out += i == 0 ? F("now") : String(i);
+    out += F("</span><small>");
+    out += formatM3(value);
+    out += F("</small></div>");
+  }
+  out += F("</div>");
+  return out;
+}
+
+AppWebServer::AppWebServer(AppConfig& config, WaterData& waterData, WaterHistory& history)
+  : config(config), waterData(waterData), history(history), server(80) {
 }
 
 void AppWebServer::begin() {
   server.on("/", HTTP_GET, std::bind(&AppWebServer::handleRoot, this));
   server.on("/configuration.json", HTTP_GET, std::bind(&AppWebServer::handleConfigJson, this));
   server.on("/data.json", HTTP_GET, std::bind(&AppWebServer::handleDataJson, this));
+  server.on("/dayplot.json", HTTP_GET, std::bind(&AppWebServer::handleDayPlotJson, this));
+  server.on("/monthplot.json", HTTP_GET, std::bind(&AppWebServer::handleMonthPlotJson, this));
   server.on("/save", HTTP_POST, std::bind(&AppWebServer::handleSave, this));
   server.on("/reboot", HTTP_POST, std::bind(&AppWebServer::handleReboot, this));
   server.onNotFound(std::bind(&AppWebServer::handleRoot, this));
@@ -51,6 +85,10 @@ void AppWebServer::handleRoot() {
   body += config.hasMeter() ? F("Yes") : F("No");
   body += F("</dd><dt>Total</dt><dd>");
   body += waterData.valid ? String(waterData.totalM3(), 3) + String(" m3") : String("No frame yet");
+  body += F("</dd><dt>Today</dt><dd>");
+  body += formatM3(history.getTodayMilliM3()) + String(" m3");
+  body += F("</dd><dt>Last 24 hours</dt><dd>");
+  body += formatM3(history.getLast24HoursMilliM3()) + String(" m3");
   body += F("</dd><dt>Month usage</dt><dd>");
   body += waterData.valid ? String(waterData.monthUsageM3(), 3) + String(" m3") : String("-");
   body += F("</dd><dt>Water temp</dt><dd>");
@@ -58,6 +96,12 @@ void AppWebServer::handleRoot() {
   body += F("</dd><dt>Room temp</dt><dd>");
   body += waterData.valid ? String(waterData.ambientTemperatureC) + String(" C") : String("-");
   body += F("</dd></dl></section>");
+
+  body += F("<section><h2>Hourly water use</h2>");
+  body += graphBars(history, false);
+  body += F("</section><section><h2>Daily water use</h2>");
+  body += graphBars(history, true);
+  body += F("</section>");
 
   body += F("<section><h2>Setup</h2><form method=\"post\" action=\"/save\">");
   body += F("<label>WiFi SSID<input name=\"wifiSsid\" value=\"");
@@ -129,6 +173,12 @@ void AppWebServer::handleDataJson() {
   json += String(waterData.monthStartM3(), 3);
   json += F(",\"month_usage_m3\":");
   json += String(waterData.monthUsageM3(), 3);
+  json += F(",\"today_m3\":");
+  json += formatM3(history.getTodayMilliM3());
+  json += F(",\"last_24h_m3\":");
+  json += formatM3(history.getLast24HoursMilliM3());
+  json += F(",\"last_31d_m3\":");
+  json += formatM3(history.getLast31DaysMilliM3());
   json += F(",\"water_temperature_c\":");
   json += waterData.waterTemperatureC;
   json += F(",\"ambient_temperature_c\":");
@@ -144,6 +194,34 @@ void AppWebServer::handleDataJson() {
   json += F("},\"last_frame_age_s\":");
   json += waterData.valid ? String((millis() - waterData.lastFrameMillis) / 1000) : F("null");
   json += F("}");
+  server.send(200, "application/json", json);
+}
+
+void AppWebServer::handleDayPlotJson() {
+  String json;
+  json.reserve(420);
+  json += F("{\"unit\":\"m3\",\"resolution\":\"hour\",\"values\":[");
+  for (int8_t i = 23; i >= 0; i--) {
+    json += formatM3(history.getHourMilliM3(i));
+    if (i > 0) {
+      json += ",";
+    }
+  }
+  json += F("]}");
+  server.send(200, "application/json", json);
+}
+
+void AppWebServer::handleMonthPlotJson() {
+  String json;
+  json.reserve(520);
+  json += F("{\"unit\":\"m3\",\"resolution\":\"day\",\"values\":[");
+  for (int8_t i = 30; i >= 0; i--) {
+    json += formatM3(history.getDayMilliM3(i));
+    if (i > 0) {
+      json += ",";
+    }
+  }
+  json += F("]}");
   server.send(200, "application/json", json);
 }
 
@@ -207,6 +285,8 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("dt{color:#52606d}dd{margin:0;font-weight:600}form{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}");
   html += F("label{display:grid;gap:5px;font-size:13px;color:#334e68}input{font:inherit;padding:10px;border:1px solid #bcccdc;border-radius:6px}");
   html += F("button{font:inherit;padding:10px 14px;border:0;border-radius:6px;background:#0b7285;color:white;font-weight:700;cursor:pointer;align-self:end}");
+  html += F(".bars{height:170px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden}");
+  html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0;min-height:1px}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
   html += F("</style></head><body><header><h1>Multical 21 Reader</h1></header><main>");
   html += body;
   html += F("</main></body></html>");

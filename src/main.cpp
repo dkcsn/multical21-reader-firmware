@@ -21,6 +21,7 @@
 #include "AppConfig.h"
 #include "AppWebServer.h"
 #include "WaterData.h"
+#include "WaterHistory.h"
 #include "WaterMeter.h"
 #include "hwconfig.h"
 
@@ -33,8 +34,9 @@
 
 AppConfig appConfig;
 WaterData waterData;
+WaterHistory waterHistory;
 WaterMeter waterMeter;
-AppWebServer webServer(appConfig, waterData);
+AppWebServer webServer(appConfig, waterData, waterHistory);
 
 WiFiClient espMqttClient;
 PubSubClient mqttClient(espMqttClient);
@@ -182,6 +184,10 @@ static void publishWaterData() {
   payload += waterData.alarms.reverse ? "true" : "false";
   payload += "},\"last_frame_age_s\":";
   payload += String((millis() - waterData.lastFrameMillis) / 1000);
+  payload += ",\"today_m3\":";
+  payload += String(waterHistory.getTodayMilliM3() / 1000.0f, 3);
+  payload += ",\"last_24h_m3\":";
+  payload += String(waterHistory.getLast24HoursMilliM3() / 1000.0f, 3);
   payload += "}";
 
   mqttClient.publish(topic("state").c_str(), payload.c_str(), true);
@@ -207,6 +213,7 @@ void setup() {
   Serial.println("Multical 21 Reader booting");
 
   appConfig.begin();
+  waterHistory.begin();
 
   if (!connectWifi()) {
     startSetupAp();
@@ -231,6 +238,7 @@ void loop() {
   startRadioIfConfigured();
 
   if (radioStarted && waterMeter.readFrame(waterData, appConfig.data())) {
+    waterHistory.update(waterData);
     publishWaterData();
     lastMqttPublish = millis();
   }

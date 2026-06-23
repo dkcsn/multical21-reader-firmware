@@ -19,7 +19,10 @@ Current firmware baseline:
   setup.
 - Stores configuration in EEPROM instead of requiring a local `credentials.h`.
 - Publishes decoded water meter state to MQTT as JSON when MQTT is configured.
-- Exposes `/configuration.json` and `/data.json` for UI/API use.
+- Tracks in-memory hourly and daily consumption history from the cumulative
+  Multical 21 counter.
+- Exposes `/configuration.json`, `/data.json`, `/dayplot.json`, and
+  `/monthplot.json` for UI/API use.
 - Uses ESP32 mbedTLS AES-CTR and ESP8266 Crypto AES-CTR for Multical 21 frame
   decryption.
 
