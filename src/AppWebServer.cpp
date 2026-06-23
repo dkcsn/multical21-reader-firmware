@@ -974,7 +974,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("<a href=\"/\" title=\"Dashboard\"><svg viewBox=\"0 0 24 24\"><path d=\"M3 12l9-9 9 9\"></path><path d=\"M5 10v10h14V10\"></path></svg><span>Dashboard</span></a>");
   html += F("<a href=\"/setup\" title=\"Setup\"><svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"3\"></circle><path d=\"M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.1 2.1-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V20h-3v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-2.1-2.1.1-.1A1.7 1.7 0 0 0 5 15a1.7 1.7 0 0 0-1.5-1H3v-3h.5A1.7 1.7 0 0 0 5 10a1.7 1.7 0 0 0-.3-1.9l-.1-.1 2.1-2.1.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V4h3v.8a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 2.1 2.1-.1.1A1.7 1.7 0 0 0 19 10a1.7 1.7 0 0 0 1.5 1h.5v3h-.5a1.7 1.7 0 0 0-1.1 1z\"></path></svg><span>Setup</span></a>");
   html += F("<a href=\"/graphs\" title=\"Graphs\"><svg viewBox=\"0 0 24 24\"><path d=\"M4 19V5\"></path><path d=\"M4 19h16\"></path><path d=\"M8 16v-4\"></path><path d=\"M12 16V8\"></path><path d=\"M16 16v-6\"></path></svg><span>Graphs</span></a>");
-  html += F("<a href=\"/firmware\" title=\"Firmware\"><svg viewBox=\"0 0 24 24\"><path d=\"M12 3v12\"></path><path d=\"M8 7l4-4 4 4\"></path><path d=\"M5 15v4h14v-4\"></path></svg><span>");
+  html += F("<a href=\"/firmware\" title=\"Firmware\"><svg viewBox=\"0 0 24 24\"><path d=\"M12 3v12\"></path><path d=\"M8 7l4-4 4 4\"></path><path d=\"M5 15v4h14v-4\"></path></svg><span>FW ");
   html += htmlEscape(firmwareVersion());
   html += F("</span></a>");
   html += F("</div></nav></header><main>");
