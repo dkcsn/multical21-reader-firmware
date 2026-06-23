@@ -15,13 +15,14 @@
 
 #include "WMbusFrame.h"
 
-void  mqttDebug(const char* debug_str);
-void  mqttMyData(const char* debug_str);
-void  mqttMyDataJson(const char* debug_str);
-
-WMBusFrame::WMBusFrame()
+WMBusFrame::WMBusFrame(const uint8_t meterId[4], const uint8_t key[16])
 {
-  aes128.setKey(key, sizeof(key));
+  memcpy(this->meterId, meterId, sizeof(this->meterId));
+#if defined(ESP32)
+  memcpy(this->key, key, sizeof(this->key));
+#else
+  aes128.setKey(key, 16);
+#endif
 }
 
 void WMBusFrame::check()
@@ -40,9 +41,11 @@ void WMBusFrame::check()
     isValid = true;
 }
 
-void WMBusFrame::printMeterInfo(uint8_t *data, size_t len)
+void WMBusFrame::parseMeterInfo(uint8_t *data, size_t len, WaterData& waterData)
 {
-    // init positions for compact frame
+  (void) len;
+
+  // init positions for compact frame
   int pos_tt = 9; // total consumption
   int pos_tg = 13; // target consumption
   int pos_ic = 7; // info codes
@@ -59,56 +62,34 @@ void WMBusFrame::printMeterInfo(uint8_t *data, size_t len)
     pos_at = 25;
   }
 
-  char total[10];
-  char mqttstring[25];
-  char mqttjsondstring[100];
-  String s;
   uint32_t tt = data[pos_tt]
               + (data[pos_tt+1] << 8)
               + (data[pos_tt+2] << 16)
               + (data[pos_tt+3] << 24);
-  snprintf(total, sizeof(total), "%d.%03d", tt/1000, tt%1000 );
-  //Serial.printf("total: %s m%c - ", total, 179);
-  Serial.printf("CurrentValue: %s m3 - ", total);
 
- // s="/watermeter/MyData";
- // mqttClient.publish(s.c_str(), total, true);
- snprintf(mqttstring, sizeof(mqttstring), "CurrentValue:%d.%03d", tt/1000, tt%1000 );
- mqttMyData(mqttstring);
-
-
-  char target[10];
   uint32_t tg = data[pos_tg]
               + (data[pos_tg+1] << 8)
               + (data[pos_tg+2] << 16)
               + (data[pos_tg+3] << 24);
-  snprintf(target, sizeof(target), "%d.%03d", tg/1000, tg%1000 );
-  //Serial.printf("target: %s m%c - ", target, 179);
-  Serial.printf("MonthStartValue: %s m3 - ", target);
- snprintf(mqttstring, sizeof(mqttstring), "MonthStartValue:%d.%03d", tg/1000, tg%1000 );
- mqttMyData(mqttstring);
 
-  char flow_temp[3];
-  snprintf(flow_temp, sizeof(flow_temp), "%2d", data[pos_ft]);
-  //Serial.printf("%s %cC - ", flow_temp, 176);
-  Serial.printf("WaterTemp: %s C - ", flow_temp);
-  snprintf(mqttstring, sizeof(mqttstring), "WaterTemp:%2d", data[pos_ft]);
-  mqttMyData(mqttstring);
+  waterData.totalMilliM3 = tt;
+  waterData.monthStartMilliM3 = tg;
+  waterData.waterTemperatureC = (int8_t) data[pos_ft];
+  waterData.ambientTemperatureC = (int8_t) data[pos_at];
+  waterData.alarms.burst = (data[pos_ic] & 0x01) != 0;
+  waterData.alarms.leak = (data[pos_ic] & 0x02) != 0;
+  waterData.alarms.dry = (data[pos_ic] & 0x04) != 0;
+  waterData.alarms.reverse = (data[pos_ic] & 0x08) != 0;
+  waterData.lastFrameMillis = millis();
+  waterData.valid = true;
 
-  char ambient_temp[3];
-  snprintf(ambient_temp, sizeof(ambient_temp), "%2d", data[pos_at]);
-  //Serial.printf("%s %cC\n\r", ambient_temp, 176);
-  Serial.printf("RoomTemp: %s C\n\r", ambient_temp);
-  snprintf(mqttstring, sizeof(mqttstring), "RoomTemp:%2d", data[pos_at]);
-  mqttMyData(mqttstring);
-
-snprintf(mqttjsondstring, sizeof(mqttjsondstring), "{\"currentValue\":%d.%03d,\"monthStartValue\":%d.%03d,\"WaterTemp\":%2d,\"RoomTemp\":%2d}",tt/1000, tt%1000, tg/1000, tg%1000, data[pos_ft],data[pos_at]);
-mqttMyDataJson(mqttjsondstring);
-  
-
+  Serial.printf("CurrentValue: %d.%03d m3 - ", tt/1000, tt%1000);
+  Serial.printf("MonthStartValue: %d.%03d m3 - ", tg/1000, tg%1000);
+  Serial.printf("WaterTemp: %d C - ", waterData.waterTemperatureC);
+  Serial.printf("RoomTemp: %d C\n\r", waterData.ambientTemperatureC);
 }
 
-void WMBusFrame::decode()
+void WMBusFrame::decode(WaterData& waterData)
 {
   // check meterId, CRC
   check();
@@ -122,8 +103,18 @@ void WMBusFrame::decode()
   iv[8] = payload[10];
   memcpy(&iv[9], &payload[12], 4);
 
+#if defined(ESP32)
+  mbedtls_aes_context ctx;
+  size_t ncOff = 0;
+  uint8_t streamBlock[16] = { 0 };
+  mbedtls_aes_init(&ctx);
+  mbedtls_aes_setkey_enc(&ctx, key, 128);
+  mbedtls_aes_crypt_ctr(&ctx, cipherLength, &ncOff, iv, streamBlock, cipher, plaintext);
+  mbedtls_aes_free(&ctx);
+#else
   aes128.setIV(iv, sizeof(iv));
   aes128.decrypt(plaintext, (const uint8_t *) cipher, cipherLength);
+#endif
 
 /*
   Serial.printf("C:     ");
@@ -140,5 +131,5 @@ void WMBusFrame::decode()
   Serial.println();
 */
 
-  printMeterInfo(plaintext, cipherLength);
+  parseMeterInfo(plaintext, cipherLength, waterData);
 }

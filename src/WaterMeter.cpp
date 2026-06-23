@@ -116,16 +116,14 @@ void WaterMeter::reset(void)
 void WaterMeter::startReceiver(void)
 {
   cmdStrobe(CC1101_SIDLE);      // Enter IDLE state
-  while (readReg(CC1101_MARCSTATE, CC1101_STATUS_REGISTER) != MARCSTATE_IDLE);
-  {
+  while (readReg(CC1101_MARCSTATE, CC1101_STATUS_REGISTER) != MARCSTATE_IDLE) {
     delay(1);
   }
   
   cmdStrobe(CC1101_SFRX);              // flush receive queue
 
   cmdStrobe(CC1101_SRX);               // Enter RX state
-  while (readReg(CC1101_MARCSTATE, CC1101_STATUS_REGISTER) != MARCSTATE_RX);
-  {
+  while (readReg(CC1101_MARCSTATE, CC1101_STATUS_REGISTER) != MARCSTATE_RX) {
     delay(1);
   }
 }
@@ -174,7 +172,7 @@ void WaterMeter::initializeRegisters(void)
 }
 
 volatile boolean packetAvailable = false;
-void ICACHE_RAM_ATTR GD0_ISR(void);
+void IRAM_ATTR GD0_ISR(void);
 
 // handle interrupt from CC1101 via GDO0
 void GD0_ISR(void) {
@@ -183,8 +181,8 @@ void GD0_ISR(void) {
 }
 
 // should be called frequently, handles the ISR flag
-// does the frame checkin and decryption
-bool WaterMeter::isFrameAvailable(void)
+// does the frame checking and decryption
+bool WaterMeter::readFrame(WaterData& waterData, const AppConfigData& config)
 {
   if (packetAvailable)
   {
@@ -195,9 +193,9 @@ bool WaterMeter::isFrameAvailable(void)
     // clear the flag
     packetAvailable = false;
  
-    WMBusFrame frame;
+    WMBusFrame frame(config.meterId, config.encryptionKey);
  
-    receive(&frame);
+    receive(&frame, waterData);
 
     // Enable wireless reception interrupt
     attachInterrupt(digitalPinToInterrupt(CC1101_GDO0), GD0_ISR, FALLING);
@@ -232,7 +230,7 @@ uint8_t WaterMeter::readByteFromFifo(void)
 }
 
 // handles a received frame and restart the CC1101 receiver
-void WaterMeter::receive(WMBusFrame * frame)
+void WaterMeter::receive(WMBusFrame * frame, WaterData& waterData)
 {
   // read preamble, should be 0x543D
   uint8_t p1 = readByteFromFifo();
@@ -257,7 +255,7 @@ void WaterMeter::receive(WMBusFrame * frame)
     }
 
     // do some checks: my meterId, crc ok
-    frame->decode();
+    frame->decode(waterData);
   }
 
   // flush RX fifo and restart receiver

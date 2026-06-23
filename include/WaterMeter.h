@@ -18,6 +18,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include "WMBusFrame.h"
+#include "AppConfig.h"
 
 #define MARCSTATE_SLEEP            0x00
 #define MARCSTATE_IDLE             0x01
@@ -211,7 +212,7 @@ class WaterMeter
     void reset(void);
 
     // receive a wmbus frame 
-    void receive(WMBusFrame *payload);
+    void receive(WMBusFrame *payload, WaterData& waterData);
     
   public:
 
@@ -222,7 +223,7 @@ class WaterMeter
     void begin();
 
     // must be called frequently, returns true if a valid frame was received
-    bool isFrameAvailable(void);
+    bool readFrame(WaterData& waterData, const AppConfigData& config);
 };
 
 #endif // _WATERMETER_H_
