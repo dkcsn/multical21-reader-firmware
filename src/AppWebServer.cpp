@@ -94,6 +94,89 @@ static bool isOpenNetwork(uint8_t index) {
 #endif
 }
 
+static String buildSetupSection(AppConfig& config, bool onboardingMode) {
+  const AppConfigData& cfg = config.data();
+  String out;
+  out += F("<section id=\"setup\" class=\"setupPanel");
+  out += onboardingMode ? F(" onboardingPanel") : F("");
+  out += F("\"><div class=\"sectionHead\"><h2>");
+  out += onboardingMode ? F("WiFi onboarding") : F("Setup");
+  out += F("</h2><span>");
+  out += onboardingMode ? F("Setup AP") : F("Settings");
+  out += F("</span></div><form method=\"post\" action=\"/save\">");
+  out += F("<label>WiFi SSID<input id=\"wifiSsid\" name=\"wifiSsid\" value=\"");
+  out += htmlEscape(cfg.wifiSsid);
+  out += F("\"></label>");
+  out += F("<label>WiFi password<input id=\"wifiPassword\" name=\"wifiPassword\" type=\"password\" placeholder=\"");
+  out += htmlEscape(config.maskedWifiPassword());
+  out += F("\"></label>");
+  out += F("<div class=\"wifiActions\"><button type=\"button\" onclick=\"scanWifi()\">Scan WiFi</button><button type=\"button\" onclick=\"testWifi()\">Test WiFi</button><span id=\"wifiResult\"></span></div><div id=\"wifiList\" class=\"wifiList\"></div>");
+  out += F("<label>NTP enabled<select name=\"ntpEnabled\"><option value=\"1\"");
+  out += cfg.ntpEnabled ? F(" selected") : F("");
+  out += F(">Enabled</option><option value=\"0\"");
+  out += !cfg.ntpEnabled ? F(" selected") : F("");
+  out += F(">Disabled</option></select></label>");
+  out += F("<label>NTP server<input name=\"ntpServer\" value=\"");
+  out += htmlEscape(cfg.ntpServer);
+  out += F("\"></label>");
+  out += F("<label>Timezone offset minutes<input name=\"timezoneOffsetMinutes\" inputmode=\"numeric\" value=\"");
+  out += String(cfg.timezoneOffsetMinutes);
+  out += F("\"></label>");
+  out += F("<label>MQTT enabled<select name=\"mqttEnabled\"><option value=\"1\"");
+  out += cfg.mqttEnabled ? F(" selected") : F("");
+  out += F(">Enabled</option><option value=\"0\"");
+  out += !cfg.mqttEnabled ? F(" selected") : F("");
+  out += F(">Disabled</option></select></label>");
+  out += F("<label>MQTT host<input name=\"mqttHost\" value=\"");
+  out += htmlEscape(cfg.mqttHost);
+  out += F("\"></label>");
+  out += F("<label>MQTT port<input name=\"mqttPort\" inputmode=\"numeric\" value=\"");
+  out += String(cfg.mqttPort);
+  out += F("\"></label>");
+  out += F("<label>MQTT username<input name=\"mqttUsername\" value=\"");
+  out += htmlEscape(cfg.mqttUsername);
+  out += F("\"></label>");
+  out += F("<label>MQTT password<input name=\"mqttPassword\" type=\"password\" placeholder=\"");
+  out += htmlEscape(config.maskedMqttPassword());
+  out += F("\"></label>");
+  out += F("<label>MQTT base topic<input name=\"mqttBaseTopic\" value=\"");
+  out += htmlEscape(cfg.mqttBaseTopic);
+  out += F("\"></label>");
+  out += F("<label>MQTT retain<select name=\"mqttRetain\"><option value=\"1\"");
+  out += cfg.mqttRetain ? F(" selected") : F("");
+  out += F(">Enabled</option><option value=\"0\"");
+  out += !cfg.mqttRetain ? F(" selected") : F("");
+  out += F(">Disabled</option></select></label>");
+  out += F("<label>Secure MQTT TLS<select name=\"mqttSecure\"><option value=\"1\"");
+  out += cfg.mqttSecure ? F(" selected") : F("");
+  out += F(">Enabled</option><option value=\"0\"");
+  out += !cfg.mqttSecure ? F(" selected") : F("");
+  out += F(">Disabled</option></select></label>");
+  out += F("<label>Home Assistant discovery<select name=\"homeAssistantDiscovery\"><option value=\"1\"");
+  out += cfg.homeAssistantDiscovery ? F(" selected") : F("");
+  out += F(">Enabled</option><option value=\"0\"");
+  out += !cfg.homeAssistantDiscovery ? F(" selected") : F("");
+  out += F(">Disabled</option></select></label>");
+  out += F("<label>HA discovery prefix<input name=\"homeAssistantPrefix\" value=\"");
+  out += htmlEscape(cfg.homeAssistantPrefix);
+  out += F("\"></label>");
+  out += F("<label>Telnet debug<select name=\"telnetDebugEnabled\"><option value=\"1\"");
+  out += cfg.telnetDebugEnabled ? F(" selected") : F("");
+  out += F(">Enabled</option><option value=\"0\"");
+  out += !cfg.telnetDebugEnabled ? F(" selected") : F("");
+  out += F(">Disabled</option></select></label>");
+  out += F("<label>Meter serial hex<input name=\"meterSerial\" value=\"");
+  out += htmlEscape(config.meterSerialHex());
+  out += F("\" maxlength=\"8\"></label>");
+  out += F("<label>AES key hex<input name=\"encryptionKey\" type=\"password\" placeholder=\"");
+  out += config.hasMeter() ? F("***") : F("32 hex chars");
+  out += F("\" maxlength=\"32\"></label>");
+  out += F("<button type=\"submit\">Save</button></form>");
+  out += F("<form method=\"post\" action=\"/reboot\"><button type=\"submit\">Reboot</button></form>");
+  out += F("<form method=\"post\" action=\"/reset-config\"><button class=\"danger\" type=\"submit\">Reset setup</button></form></section>");
+  return out;
+}
+
 AppWebServer::AppWebServer(AppConfig& config, WaterData& waterData, WaterHistory& history)
   : config(config), waterData(waterData), history(history), server(80),
     firmwareUploadSuccess(false), firmwareUploadMessage() {
@@ -101,6 +184,8 @@ AppWebServer::AppWebServer(AppConfig& config, WaterData& waterData, WaterHistory
 
 void AppWebServer::begin() {
   server.on("/", HTTP_GET, std::bind(&AppWebServer::handleRoot, this));
+  server.on("/setup", HTTP_GET, std::bind(&AppWebServer::handleSetupPage, this));
+  server.on("/graphs", HTTP_GET, std::bind(&AppWebServer::handleGraphsPage, this));
   server.on("/firmware", HTTP_GET, std::bind(&AppWebServer::handleFirmwarePage, this));
   server.on("/firmware", HTTP_POST, std::bind(&AppWebServer::handleFirmwarePost, this), std::bind(&AppWebServer::handleFirmwareUpload, this));
   server.on("/configuration.json", HTTP_GET, std::bind(&AppWebServer::handleConfigJson, this));
@@ -118,6 +203,7 @@ void AppWebServer::begin() {
   server.on("/fwlink", HTTP_GET, std::bind(&AppWebServer::handleCaptiveRedirect, this));
   server.on("/save", HTTP_POST, std::bind(&AppWebServer::handleSave, this));
   server.on("/reboot", HTTP_POST, std::bind(&AppWebServer::handleReboot, this));
+  server.on("/reset-config", HTTP_POST, std::bind(&AppWebServer::handleResetConfig, this));
   server.onNotFound(std::bind(&AppWebServer::handleRoot, this));
   server.begin();
 }
@@ -132,89 +218,9 @@ void AppWebServer::handleRoot() {
   const bool onboardingMode = !wifiConnected || !config.hasWifi();
   const String deviceIp = wifiConnected ? WiFi.localIP().toString() : String("192.168.4.1");
 
-  String setupSection;
-  setupSection.reserve(4500);
-  setupSection += F("<section id=\"setup\" class=\"setupPanel");
-  setupSection += onboardingMode ? F(" onboardingPanel") : F("");
-  setupSection += F("\"><div class=\"sectionHead\"><h2>");
-  setupSection += onboardingMode ? F("WiFi onboarding") : F("Setup");
-  setupSection += F("</h2><span>");
-  setupSection += onboardingMode ? F("Setup AP") : F("Settings");
-  setupSection += F("</span></div><form method=\"post\" action=\"/save\">");
-  setupSection += F("<label>WiFi SSID<input id=\"wifiSsid\" name=\"wifiSsid\" value=\"");
-  setupSection += htmlEscape(cfg.wifiSsid);
-  setupSection += F("\"></label>");
-  setupSection += F("<label>WiFi password<input id=\"wifiPassword\" name=\"wifiPassword\" type=\"password\" placeholder=\"");
-  setupSection += htmlEscape(config.maskedWifiPassword());
-  setupSection += F("\"></label>");
-  setupSection += F("<div class=\"wifiActions\"><button type=\"button\" onclick=\"scanWifi()\">Scan WiFi</button><button type=\"button\" onclick=\"testWifi()\">Test WiFi</button><span id=\"wifiResult\"></span></div><div id=\"wifiList\" class=\"wifiList\"></div>");
-  setupSection += F("<label>NTP enabled<select name=\"ntpEnabled\"><option value=\"1\"");
-  setupSection += cfg.ntpEnabled ? F(" selected") : F("");
-  setupSection += F(">Enabled</option><option value=\"0\"");
-  setupSection += !cfg.ntpEnabled ? F(" selected") : F("");
-  setupSection += F(">Disabled</option></select></label>");
-  setupSection += F("<label>NTP server<input name=\"ntpServer\" value=\"");
-  setupSection += htmlEscape(cfg.ntpServer);
-  setupSection += F("\"></label>");
-  setupSection += F("<label>Timezone offset minutes<input name=\"timezoneOffsetMinutes\" inputmode=\"numeric\" value=\"");
-  setupSection += String(cfg.timezoneOffsetMinutes);
-  setupSection += F("\"></label>");
-  setupSection += F("<label>MQTT enabled<select name=\"mqttEnabled\"><option value=\"1\"");
-  setupSection += cfg.mqttEnabled ? F(" selected") : F("");
-  setupSection += F(">Enabled</option><option value=\"0\"");
-  setupSection += !cfg.mqttEnabled ? F(" selected") : F("");
-  setupSection += F(">Disabled</option></select></label>");
-  setupSection += F("<label>MQTT host<input name=\"mqttHost\" value=\"");
-  setupSection += htmlEscape(cfg.mqttHost);
-  setupSection += F("\"></label>");
-  setupSection += F("<label>MQTT port<input name=\"mqttPort\" inputmode=\"numeric\" value=\"");
-  setupSection += String(cfg.mqttPort);
-  setupSection += F("\"></label>");
-  setupSection += F("<label>MQTT username<input name=\"mqttUsername\" value=\"");
-  setupSection += htmlEscape(cfg.mqttUsername);
-  setupSection += F("\"></label>");
-  setupSection += F("<label>MQTT password<input name=\"mqttPassword\" type=\"password\" placeholder=\"");
-  setupSection += htmlEscape(config.maskedMqttPassword());
-  setupSection += F("\"></label>");
-  setupSection += F("<label>MQTT base topic<input name=\"mqttBaseTopic\" value=\"");
-  setupSection += htmlEscape(cfg.mqttBaseTopic);
-  setupSection += F("\"></label>");
-  setupSection += F("<label>MQTT retain<select name=\"mqttRetain\"><option value=\"1\"");
-  setupSection += cfg.mqttRetain ? F(" selected") : F("");
-  setupSection += F(">Enabled</option><option value=\"0\"");
-  setupSection += !cfg.mqttRetain ? F(" selected") : F("");
-  setupSection += F(">Disabled</option></select></label>");
-  setupSection += F("<label>Secure MQTT TLS<select name=\"mqttSecure\"><option value=\"1\"");
-  setupSection += cfg.mqttSecure ? F(" selected") : F("");
-  setupSection += F(">Enabled</option><option value=\"0\"");
-  setupSection += !cfg.mqttSecure ? F(" selected") : F("");
-  setupSection += F(">Disabled</option></select></label>");
-  setupSection += F("<label>Home Assistant discovery<select name=\"homeAssistantDiscovery\"><option value=\"1\"");
-  setupSection += cfg.homeAssistantDiscovery ? F(" selected") : F("");
-  setupSection += F(">Enabled</option><option value=\"0\"");
-  setupSection += !cfg.homeAssistantDiscovery ? F(" selected") : F("");
-  setupSection += F(">Disabled</option></select></label>");
-  setupSection += F("<label>HA discovery prefix<input name=\"homeAssistantPrefix\" value=\"");
-  setupSection += htmlEscape(cfg.homeAssistantPrefix);
-  setupSection += F("\"></label>");
-  setupSection += F("<label>Telnet debug<select name=\"telnetDebugEnabled\"><option value=\"1\"");
-  setupSection += cfg.telnetDebugEnabled ? F(" selected") : F("");
-  setupSection += F(">Enabled</option><option value=\"0\"");
-  setupSection += !cfg.telnetDebugEnabled ? F(" selected") : F("");
-  setupSection += F(">Disabled</option></select></label>");
-  setupSection += F("<label>Meter serial hex<input name=\"meterSerial\" value=\"");
-  setupSection += htmlEscape(config.meterSerialHex());
-  setupSection += F("\" maxlength=\"8\"></label>");
-  setupSection += F("<label>AES key hex<input name=\"encryptionKey\" type=\"password\" placeholder=\"");
-  setupSection += config.hasMeter() ? F("***") : F("32 hex chars");
-  setupSection += F("\" maxlength=\"32\"></label>");
-  setupSection += F("<button type=\"submit\">Save</button></form>");
-  setupSection += F("<form method=\"post\" action=\"/reboot\"><button type=\"submit\">Reboot</button></form></section>");
-
   String body;
-  body.reserve(9000);
   if (onboardingMode) {
-    body += setupSection;
+    body += buildSetupSection(config, true);
   }
   body += F("<section class=\"hero\"><div><p class=\"eyebrow\">Kamstrup Multical 21</p><h2>Water reader dashboard</h2><p class=\"heroText\">");
   body += waterData.valid ? F("Live water meter data is being decoded and stored locally.") : F("Waiting for the first valid wireless M-Bus frame.");
@@ -291,11 +297,7 @@ void AppWebServer::handleRoot() {
   body += cfg.telnetDebugEnabled ? F("Enabled on port 23") : F("Disabled");
   body += F("</dd></dl></section>");
 
-  body += F("<section class=\"graphPanel\"><div class=\"sectionHead\"><h2>Hourly water use</h2><span>Last 24 hours</span></div>");
-  body += graphBars(history, false);
-  body += F("</section><section class=\"graphPanel\"><div class=\"sectionHead\"><h2>Daily water use</h2><span>Last 31 days</span></div>");
-  body += graphBars(history, true);
-  body += F("</section>");
+  body += F("<section><h2>Graphs</h2><dl><dt>Water usage</dt><dd><a class=\"buttonLink\" href=\"/graphs\">Open graphs</a></dd></dl></section>");
 
   body += F("<section><h2>Fibaro / local API</h2><dl>");
   body += F("<dt>State JSON</dt><dd><code>http://");
@@ -303,11 +305,24 @@ void AppWebServer::handleRoot() {
   body += F("/data.json</code></dd><dt>Hourly plot</dt><dd><code>/dayplot.json</code></dd><dt>Daily plot</dt><dd><code>/monthplot.json</code></dd>");
   body += F("<dt>Sync rule</dt><dd>Use total_m3 as source of truth and treat data as stale when last_frame_age_s is high.</dd></dl></section>");
 
-  body += F("<section><h2>Firmware</h2><dl><dt>Browser update</dt><dd><a class=\"buttonLink\" href=\"/firmware\">Upload firmware</a></dd></dl></section>");
+  body += F("<section><h2>Tools</h2><dl><dt>Setup</dt><dd><a class=\"buttonLink\" href=\"/setup\">Open setup</a></dd>");
+  body += F("<dt>Firmware</dt><dd><a class=\"buttonLink\" href=\"/firmware\">Upload firmware</a></dd></dl></section>");
 
-  if (!onboardingMode) {
-    body += setupSection;
-  }
+  sendHtml(body);
+}
+
+void AppWebServer::handleSetupPage() {
+  const bool onboardingMode = WiFi.status() != WL_CONNECTED || !config.hasWifi();
+  sendHtml(buildSetupSection(config, onboardingMode));
+}
+
+void AppWebServer::handleGraphsPage() {
+  String body;
+  body += F("<section class=\"graphPanel\"><div class=\"sectionHead\"><h2>Hourly water use</h2><span>Last 24 hours</span></div>");
+  body += graphBars(history, false);
+  body += F("</section><section class=\"graphPanel\"><div class=\"sectionHead\"><h2>Daily water use</h2><span>Last 31 days</span></div>");
+  body += graphBars(history, true);
+  body += F("</section>");
   sendHtml(body);
 }
 
@@ -650,9 +665,15 @@ void AppWebServer::handleReboot() {
   ESP.restart();
 }
 
+void AppWebServer::handleResetConfig() {
+  config.clear();
+  server.send(200, "text/plain", "Configuration cleared. Rebooting to setup AP.");
+  delay(400);
+  ESP.restart();
+}
+
 void AppWebServer::sendHtml(const String& body) {
   String html;
-  html.reserve(body.length() + 2600);
   html += F("<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">");
   html += F("<title>Multical 21 Reader</title><style>");
   html += F("body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#eef3f7;color:#111827}");
@@ -662,6 +683,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("dt{color:#52606d}dd{margin:0;font-weight:600}form{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}");
   html += F("code{font-size:12px;overflow-wrap:anywhere}a{color:#0b7285}label{display:grid;gap:5px;font-size:13px;color:#334e68}input,select{font:inherit;padding:10px;border:1px solid #bcccdc;border-radius:6px;background:white}");
   html += F("button,.buttonLink{font:inherit;padding:10px 14px;border:0;border-radius:6px;background:#0b7285;color:white;font-weight:700;cursor:pointer;align-self:end;text-decoration:none;display:inline-block}");
+  html += F(".danger{background:#b42318}");
   html += F(".uploadForm{margin-top:14px}.hint{color:#52606d;font-size:13px;margin:12px 0 0}");
   html += F(".hero{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:18px;align-items:center;background:#12344d;color:white;border-color:#12344d}.hero h2{font-size:28px;margin:0 0 8px}.eyebrow{margin:0 0 6px;color:#9fb3c8;font-size:12px;font-weight:800;text-transform:uppercase}.heroText{margin:0;color:#d9e2ec}.heroMeter{border:1px solid #486581;border-radius:8px;padding:14px;background:#0f2f46}.heroMeter span,.heroMeter small{display:block;color:#bcccdc}.heroMeter strong{display:block;font-size:34px;line-height:1.1;margin:4px 0}");
   html += F(".cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;background:transparent;border:0;padding:0}.card{background:white;border:1px solid #d9e2ec;border-left:5px solid #0b7285;border-radius:8px;padding:14px;min-height:108px;display:grid;gap:10px}.cardTop{display:flex;justify-content:space-between;gap:8px;align-items:center}.cardTop span{font-size:12px;color:#52606d;font-weight:800;text-transform:uppercase}.card strong{font-size:22px;line-height:1.15;overflow-wrap:anywhere}.card small{color:#52606d;overflow-wrap:anywhere}.card a{font-size:22px;font-weight:800}.chip{border-radius:999px;padding:4px 8px;font-size:11px;color:white;white-space:nowrap}.ok{background:#147d64}.warn{background:#b7791f}.off{background:#627d98}.accentWater{border-left-color:#0b7285}.accentUsage{border-left-color:#2f9e44}.accentWifi{border-left-color:#1864ab}.accentMqtt{border-left-color:#6741d9}.accentTime{border-left-color:#d9480f}.accentTools{border-left-color:#364fc7}.accentVersion{border-left-color:#087f5b}");

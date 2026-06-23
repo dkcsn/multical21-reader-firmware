@@ -29,6 +29,8 @@ private:
   String firmwareUploadMessage;
 
   void handleRoot();
+  void handleSetupPage();
+  void handleGraphsPage();
   void handleFirmwarePage();
   void handleFirmwarePost();
   void handleFirmwareUpload();
@@ -42,6 +44,7 @@ private:
   void handleCaptiveRedirect();
   void handleSave();
   void handleReboot();
+  void handleResetConfig();
   void sendHtml(const String& body);
 };
 

@@ -49,6 +49,13 @@ First boot:
    characters.
 5. Save and reboot.
 
+Force setup/captive portal:
+
+- Open `http://<device-ip>/setup` and press `Reset setup`; the device clears
+  runtime configuration and reboots into `Multical21-Setup`.
+- Or erase flash before upload from PlatformIO if you want a fully clean first
+  boot.
+
 Firmware update:
 
 1. Build the matching PlatformIO target.
