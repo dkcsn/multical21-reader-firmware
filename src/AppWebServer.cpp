@@ -1,4 +1,5 @@
 #include "AppWebServer.h"
+#include "FirmwareVersion.h"
 
 #if defined(ESP8266)
   #include <ESP8266WiFi.h>
@@ -106,6 +107,7 @@ void AppWebServer::begin() {
   server.on("/data.json", HTTP_GET, std::bind(&AppWebServer::handleDataJson, this));
   server.on("/dayplot.json", HTTP_GET, std::bind(&AppWebServer::handleDayPlotJson, this));
   server.on("/monthplot.json", HTTP_GET, std::bind(&AppWebServer::handleMonthPlotJson, this));
+  server.on("/version.json", HTTP_GET, std::bind(&AppWebServer::handleVersionJson, this));
   server.on("/wifiscan.json", HTTP_GET, std::bind(&AppWebServer::handleWifiScanJson, this));
   server.on("/wifitest.json", HTTP_POST, std::bind(&AppWebServer::handleWifiTestJson, this));
   server.on("/generate_204", HTTP_GET, std::bind(&AppWebServer::handleCaptiveRedirect, this));
@@ -178,6 +180,16 @@ void AppWebServer::handleRoot() {
   body += F("<article class=\"card accentTools\"><div class=\"cardTop\"><span>Tools</span><b class=\"chip ");
   body += cfg.telnetDebugEnabled ? F("ok\">Telnet") : F("off\">Telnet off");
   body += F("</b></div><strong><a href=\"/firmware\">Firmware</a></strong><small>Browser OTA and debug port 23</small></article>");
+
+  body += F("<article class=\"card accentVersion\"><div class=\"cardTop\"><span>Version</span><b class=\"chip ok\">");
+  body += htmlEscape(firmwareBoardName());
+  body += F("</b></div><strong>");
+  body += htmlEscape(firmwareVersion());
+  body += F("</strong><small>");
+  body += htmlEscape(firmwareGitSha());
+  body += F(" / ");
+  body += htmlEscape(firmwareBuildDate());
+  body += F("</small></article>");
   body += F("</section>");
 
   body += F("<section><h2>Meter details</h2><dl>");
@@ -286,12 +298,15 @@ void AppWebServer::handleFirmwarePage() {
   String body;
   body.reserve(1300);
   body += F("<section><h2>Firmware update</h2><dl>");
+  body += F("<dt>Version</dt><dd>");
+  body += htmlEscape(firmwareVersion());
+  body += F("</dd><dt>Build</dt><dd>");
+  body += htmlEscape(firmwareBuildDate());
+  body += F("</dd><dt>Commit</dt><dd>");
+  body += htmlEscape(firmwareGitSha());
+  body += F("</dd>");
   body += F("<dt>Board</dt><dd>");
-#if defined(ESP8266)
-  body += F("ESP8266");
-#else
-  body += F("ESP32");
-#endif
+  body += htmlEscape(firmwareBoardName());
   body += F("</dd><dt>Free sketch space</dt><dd>");
   body += String(ESP.getFreeSketchSpace());
   body += F(" bytes</dd></dl>");
@@ -467,6 +482,21 @@ void AppWebServer::handleMonthPlotJson() {
   server.send(200, "application/json", json);
 }
 
+void AppWebServer::handleVersionJson() {
+  String json;
+  json.reserve(180);
+  json += F("{\"version\":\"");
+  json += jsonEscape(firmwareVersion());
+  json += F("\",\"git_sha\":\"");
+  json += jsonEscape(firmwareGitSha());
+  json += F("\",\"build_date\":\"");
+  json += jsonEscape(firmwareBuildDate());
+  json += F("\",\"board\":\"");
+  json += jsonEscape(firmwareBoardName());
+  json += F("\"}");
+  server.send(200, "application/json", json);
+}
+
 void AppWebServer::handleWifiScanJson() {
   if (WiFi.getMode() == WIFI_AP) {
     WiFi.mode(WIFI_AP_STA);
@@ -617,7 +647,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("button,.buttonLink{font:inherit;padding:10px 14px;border:0;border-radius:6px;background:#0b7285;color:white;font-weight:700;cursor:pointer;align-self:end;text-decoration:none;display:inline-block}");
   html += F(".uploadForm{margin-top:14px}.hint{color:#52606d;font-size:13px;margin:12px 0 0}");
   html += F(".hero{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:18px;align-items:center;background:#12344d;color:white;border-color:#12344d}.hero h2{font-size:28px;margin:0 0 8px}.eyebrow{margin:0 0 6px;color:#9fb3c8;font-size:12px;font-weight:800;text-transform:uppercase}.heroText{margin:0;color:#d9e2ec}.heroMeter{border:1px solid #486581;border-radius:8px;padding:14px;background:#0f2f46}.heroMeter span,.heroMeter small{display:block;color:#bcccdc}.heroMeter strong{display:block;font-size:34px;line-height:1.1;margin:4px 0}");
-  html += F(".cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;background:transparent;border:0;padding:0}.card{background:white;border:1px solid #d9e2ec;border-left:5px solid #0b7285;border-radius:8px;padding:14px;min-height:108px;display:grid;gap:10px}.cardTop{display:flex;justify-content:space-between;gap:8px;align-items:center}.cardTop span{font-size:12px;color:#52606d;font-weight:800;text-transform:uppercase}.card strong{font-size:22px;line-height:1.15;overflow-wrap:anywhere}.card small{color:#52606d}.card a{font-size:22px;font-weight:800}.chip{border-radius:999px;padding:4px 8px;font-size:11px;color:white;white-space:nowrap}.ok{background:#147d64}.warn{background:#b7791f}.off{background:#627d98}.accentWater{border-left-color:#0b7285}.accentUsage{border-left-color:#2f9e44}.accentWifi{border-left-color:#1864ab}.accentMqtt{border-left-color:#6741d9}.accentTime{border-left-color:#d9480f}.accentTools{border-left-color:#364fc7}");
+  html += F(".cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;background:transparent;border:0;padding:0}.card{background:white;border:1px solid #d9e2ec;border-left:5px solid #0b7285;border-radius:8px;padding:14px;min-height:108px;display:grid;gap:10px}.cardTop{display:flex;justify-content:space-between;gap:8px;align-items:center}.cardTop span{font-size:12px;color:#52606d;font-weight:800;text-transform:uppercase}.card strong{font-size:22px;line-height:1.15;overflow-wrap:anywhere}.card small{color:#52606d;overflow-wrap:anywhere}.card a{font-size:22px;font-weight:800}.chip{border-radius:999px;padding:4px 8px;font-size:11px;color:white;white-space:nowrap}.ok{background:#147d64}.warn{background:#b7791f}.off{background:#627d98}.accentWater{border-left-color:#0b7285}.accentUsage{border-left-color:#2f9e44}.accentWifi{border-left-color:#1864ab}.accentMqtt{border-left-color:#6741d9}.accentTime{border-left-color:#d9480f}.accentTools{border-left-color:#364fc7}.accentVersion{border-left-color:#087f5b}");
   html += F(".sectionHead{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin:0 0 10px}.sectionHead h2{margin:0}.sectionHead span{color:#52606d;font-size:12px;font-weight:700;text-transform:uppercase}.graphPanel{padding-bottom:12px}.graphSummary{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px}.graphSummary span{background:#f0f4f8;border:1px solid #d9e2ec;border-radius:6px;padding:7px 9px;color:#52606d;font-size:12px}.graphSummary strong{color:#102a43}");
   html += F(".wifiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.wifiActions span{font-size:13px;color:#334e68}.wifiList{grid-column:1/-1;display:grid;gap:6px}.wifiNet{display:flex;justify-content:space-between;gap:10px;border:1px solid #d9e2ec;border-radius:6px;padding:8px;background:#f8fafc;cursor:pointer}.wifiNet small{color:#52606d}");
   html += F(".bars{height:180px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden;background:linear-gradient(to top,#f8fafc,#fff)}");

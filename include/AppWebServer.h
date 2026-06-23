@@ -36,6 +36,7 @@ private:
   void handleDataJson();
   void handleDayPlotJson();
   void handleMonthPlotJson();
+  void handleVersionJson();
   void handleWifiScanJson();
   void handleWifiTestJson();
   void handleCaptiveRedirect();

@@ -1,0 +1,55 @@
+name: Release firmware
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+
+      - name: Build firmware
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            VERSION="manual-${GITHUB_RUN_NUMBER}"
+          fi
+          SHORT_SHA="${GITHUB_SHA::7}"
+          BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+          export PLATFORMIO_BUILD_FLAGS="-D FW_VERSION=\\\"${VERSION}\\\" -D FW_GIT_SHA=\\\"${SHORT_SHA}\\\" -D FW_BUILD_DATE=\\\"${BUILD_DATE}\\\""
+          platformio run
+
+          mkdir -p dist
+          cp .pio/build/esp32/firmware.bin "dist/multical21-reader-${VERSION}-esp32.bin"
+          cp .pio/build/esp8266/firmware.bin "dist/multical21-reader-${VERSION}-esp8266.bin"
+          sha256sum dist/*.bin > dist/SHA256SUMS.txt
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: multical21-reader-firmware
+          path: dist/*
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*

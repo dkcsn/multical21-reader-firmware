@@ -24,6 +24,7 @@
 #include "AppConfig.h"
 #include "AppWebServer.h"
 #include "DebugLog.h"
+#include "FirmwareVersion.h"
 #include "WaterData.h"
 #include "WaterHistory.h"
 #include "WaterMeter.h"
@@ -348,6 +349,12 @@ void setup() {
   delay(100);
   Debug.println();
   Debug.println("Multical 21 Reader booting");
+  Debug.print("Firmware ");
+  Debug.print(firmwareVersion());
+  Debug.print(" ");
+  Debug.print(firmwareBoardName());
+  Debug.print(" ");
+  Debug.println(firmwareGitSha());
 
   appConfig.begin();
   waterHistory.begin();

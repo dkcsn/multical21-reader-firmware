@@ -30,6 +30,8 @@ Current firmware baseline:
   temperatures, last frame age, and Multical alarm flags.
 - Supports browser firmware upload from `/firmware`.
 - Supports optional Telnet debug on port 23, enabled from the setup UI.
+- Shows firmware version, build date, board, and git SHA in the dashboard and
+  `/version.json`.
 - Tracks in-memory hourly and daily consumption history from the cumulative
   Multical 21 counter.
 - Persists graph history to LittleFS so charts can survive reboot.
@@ -53,6 +55,13 @@ Firmware update:
 2. Open `http://<device-ip>/firmware`.
 3. Upload the matching `.pio/build/<environment>/firmware.bin`.
 4. The device validates the image and restarts when the upload succeeds.
+
+GitHub release binaries:
+
+1. Create and push a version tag, for example `git tag v0.1.0`.
+2. Push the tag with `git push origin v0.1.0`.
+3. GitHub Actions builds ESP32 and ESP8266 `.bin` files and attaches them to
+   the release with SHA256 checksums.
 
 Telnet debug:
 
