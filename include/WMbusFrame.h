@@ -27,6 +27,8 @@ class WMBusFrame
     uint8_t iv[16];
     void check(void);
     void parseMeterInfo(uint8_t *data, size_t len, WaterData& waterData);
+    bool parseKamwaterDifVif(uint8_t *data, size_t len, WaterData& waterData);
+    void applyStatus(uint16_t status, WaterData& waterData);
     bool validatePlaintextCrc(uint8_t *data, size_t len);
     uint16_t crc16EN13757(uint8_t *data, size_t len);
     uint16_t crc16EN13757PerByte(uint16_t crc, uint8_t b);

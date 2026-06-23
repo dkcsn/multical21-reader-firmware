@@ -90,6 +90,110 @@ static uint32_t readLe32(const uint8_t *data, int pos)
        | ((uint32_t) data[pos + 3] << 24);
 }
 
+static uint16_t readLe16(const uint8_t *data, int pos)
+{
+  return (uint16_t) data[pos]
+       | ((uint16_t) data[pos + 1] << 8);
+}
+
+void WMBusFrame::applyStatus(uint16_t status, WaterData& waterData)
+{
+  waterData.alarms.dry = (status & 0x01) != 0;
+  waterData.alarms.reverse = (status & 0x02) != 0;
+  waterData.alarms.leak = (status & 0x04) != 0;
+  waterData.alarms.burst = (status & 0x08) != 0;
+}
+
+bool WMBusFrame::parseKamwaterDifVif(uint8_t *data, size_t len, WaterData& waterData)
+{
+  bool hasTotal = false;
+  bool hasStatus = false;
+  bool hasWaterTemp = false;
+  bool hasAmbientTemp = false;
+  uint16_t status = 0;
+
+  for (size_t i = 0; i < len; i++) {
+    if (i + 4 < len && data[i] == 0x02 && data[i + 1] == 0xFF && data[i + 2] == 0x20) {
+      status = readLe16(data, i + 3);
+      hasStatus = true;
+      i += 4;
+      continue;
+    }
+
+    if (i + 6 < len && data[i] == 0x04 && data[i + 1] == 0xFF && data[i + 2] == 0x23) {
+      status = readLe32(data, i + 3);
+      hasStatus = true;
+      i += 6;
+      continue;
+    }
+
+    if (i + 5 < len && data[i] == 0x04 && data[i + 1] == 0x13) {
+      waterData.totalMilliM3 = readLe32(data, i + 2);
+      hasTotal = true;
+      i += 5;
+      continue;
+    }
+
+    if (i + 5 < len && data[i] == 0x44 && data[i + 1] == 0x13) {
+      waterData.monthStartMilliM3 = readLe32(data, i + 2);
+      i += 5;
+      continue;
+    }
+
+    if (i + 2 < len && data[i] == 0x61 && data[i + 1] == 0x5B) {
+      waterData.waterTemperatureC = (int8_t) data[i + 2];
+      hasWaterTemp = true;
+      i += 2;
+      continue;
+    }
+
+    if (i + 3 < len && data[i + 1] == 0x01 && data[i + 2] == 0x5B &&
+        (data[i] == 0x81 || data[i] == 0x91 || data[i] == 0xA1)) {
+      if (!hasWaterTemp) {
+        waterData.waterTemperatureC = (int8_t) data[i + 3];
+        hasWaterTemp = true;
+      }
+      i += 3;
+      continue;
+    }
+
+    if (i + 2 < len && (data[i] == 0x51 || data[i] == 0x61) && data[i + 1] == 0x67) {
+      waterData.ambientTemperatureC = (int8_t) data[i + 2];
+      hasAmbientTemp = true;
+      i += 2;
+      continue;
+    }
+
+    if (i + 3 < len && data[i + 1] == 0x01 && data[i + 2] == 0x67 &&
+        (data[i] == 0x81 || data[i] == 0x91 || data[i] == 0xA1)) {
+      if (!hasAmbientTemp) {
+        waterData.ambientTemperatureC = (int8_t) data[i + 3];
+        hasAmbientTemp = true;
+      }
+      i += 3;
+      continue;
+    }
+  }
+
+  if (!hasTotal) {
+    return false;
+  }
+
+  if (hasStatus) {
+    applyStatus(status, waterData);
+  }
+  waterData.lastFrameMillis = millis();
+  waterData.valid = true;
+
+  Debug.printf("Kamwater DIF/VIF: CurrentValue: %d.%03d m3 - ",
+               waterData.totalMilliM3 / 1000, waterData.totalMilliM3 % 1000);
+  Debug.printf("MonthStartValue: %d.%03d m3 - ",
+               waterData.monthStartMilliM3 / 1000, waterData.monthStartMilliM3 % 1000);
+  Debug.printf("WaterTemp: %d C - ", waterData.waterTemperatureC);
+  Debug.printf("RoomTemp: %d C\n\r", waterData.ambientTemperatureC);
+  return true;
+}
+
 void WMBusFrame::parseMeterInfo(uint8_t *data, size_t len, WaterData& waterData)
 {
   // init positions for compact frame
@@ -101,6 +205,10 @@ void WMBusFrame::parseMeterInfo(uint8_t *data, size_t len, WaterData& waterData)
 
   if (!validatePlaintextCrc(data, len)) {
     isValid = false;
+    return;
+  }
+
+  if (parseKamwaterDifVif(data + 2, len - 2, waterData)) {
     return;
   }
 
@@ -141,10 +249,7 @@ void WMBusFrame::parseMeterInfo(uint8_t *data, size_t len, WaterData& waterData)
   waterData.monthStartMilliM3 = tg;
   waterData.waterTemperatureC = (int8_t) data[pos_ft];
   waterData.ambientTemperatureC = (int8_t) data[pos_at];
-  waterData.alarms.burst = (data[pos_ic] & 0x01) != 0;
-  waterData.alarms.leak = (data[pos_ic] & 0x02) != 0;
-  waterData.alarms.dry = (data[pos_ic] & 0x04) != 0;
-  waterData.alarms.reverse = (data[pos_ic] & 0x08) != 0;
+  applyStatus(data[pos_ic], waterData);
   waterData.lastFrameMillis = millis();
   waterData.valid = true;
 
