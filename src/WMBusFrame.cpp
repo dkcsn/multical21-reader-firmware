@@ -16,6 +16,8 @@
 #include "WMbusFrame.h"
 #include "DebugLog.h"
 
+#define CRC16_EN_13757 0x3D65
+
 WMBusFrame::WMBusFrame(const uint8_t meterId[4], const uint8_t key[16])
 {
   memcpy(this->meterId, meterId, sizeof(this->meterId));
@@ -42,10 +44,54 @@ void WMBusFrame::check()
     isValid = true;
 }
 
+uint16_t WMBusFrame::crc16EN13757PerByte(uint16_t crc, uint8_t b)
+{
+  for (uint8_t i = 0; i < 8; i++) {
+    if (((crc & 0x8000) >> 8) ^ (b & 0x80)) {
+      crc = (crc << 1) ^ CRC16_EN_13757;
+    } else {
+      crc = crc << 1;
+    }
+    b <<= 1;
+  }
+  return crc;
+}
+
+uint16_t WMBusFrame::crc16EN13757(uint8_t *data, size_t len)
+{
+  uint16_t crc = 0x0000;
+  for (size_t i = 0; i < len; i++) {
+    crc = crc16EN13757PerByte(crc, data[i]);
+  }
+  return ~crc;
+}
+
+bool WMBusFrame::validatePlaintextCrc(uint8_t *data, size_t len)
+{
+  if (len < 4) {
+    Debug.println("Plaintext too short for EN13757 CRC");
+    return false;
+  }
+
+  uint16_t readCrc = ((uint16_t) data[1] << 8) | data[0];
+  uint16_t calcCrc = crc16EN13757(data + 2, len - 2);
+  if (readCrc != calcCrc) {
+    Debug.printf("Plaintext CRC mismatch: read 0x%04X calc 0x%04X\n\r", readCrc, calcCrc);
+    return false;
+  }
+  return true;
+}
+
+static uint32_t readLe32(const uint8_t *data, int pos)
+{
+  return (uint32_t) data[pos]
+       | ((uint32_t) data[pos + 1] << 8)
+       | ((uint32_t) data[pos + 2] << 16)
+       | ((uint32_t) data[pos + 3] << 24);
+}
+
 void WMBusFrame::parseMeterInfo(uint8_t *data, size_t len, WaterData& waterData)
 {
-  (void) len;
-
   // init positions for compact frame
   int pos_tt = 9; // total consumption
   int pos_tg = 13; // target consumption
@@ -53,25 +99,43 @@ void WMBusFrame::parseMeterInfo(uint8_t *data, size_t len, WaterData& waterData)
   int pos_ft = 17; // flow temp
   int pos_at = 18; // ambient temp
 
-  if (data[2] == 0x78) // long frame
+  if (!validatePlaintextCrc(data, len)) {
+    isValid = false;
+    return;
+  }
+
+  if (data[2] == 0x79) // compact frame
   {
-    // overwrite it with long frame positions
+    pos_tt = 9;
+    pos_tg = 13;
+    pos_ic = 7;
+    pos_ft = 17;
+    pos_at = 18;
+  }
+  else if (data[2] == 0x78) // long frame
+  {
     pos_tt = 10;
     pos_tg = 16;
     pos_ic = 6;
-    pos_ft = 22;
-    pos_at = 25;
+    pos_ft = 23;
+    pos_at = 29;
+  }
+  else
+  {
+    Debug.printf("Unsupported Multical payload format: 0x%02X\n\r", data[2]);
+    isValid = false;
+    return;
   }
 
-  uint32_t tt = data[pos_tt]
-              + (data[pos_tt+1] << 8)
-              + (data[pos_tt+2] << 16)
-              + (data[pos_tt+3] << 24);
+  const int maxPos = max(max(pos_tt + 3, pos_tg + 3), max(pos_ft, pos_at));
+  if ((size_t) maxPos >= len) {
+    Debug.printf("Multical payload too short for format 0x%02X: %u bytes\n\r", data[2], (unsigned) len);
+    isValid = false;
+    return;
+  }
 
-  uint32_t tg = data[pos_tg]
-              + (data[pos_tg+1] << 8)
-              + (data[pos_tg+2] << 16)
-              + (data[pos_tg+3] << 24);
+  uint32_t tt = readLe32(data, pos_tt);
+  uint32_t tg = readLe32(data, pos_tg);
 
   waterData.totalMilliM3 = tt;
   waterData.monthStartMilliM3 = tg;
