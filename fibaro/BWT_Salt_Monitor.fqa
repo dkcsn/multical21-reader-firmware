@@ -1,0 +1,263 @@
+{
+  "name": "BWT Salt Monitor",
+  "type": "com.fibaro.binarySwitch",
+  "apiVersion": "1.2",
+  "initialProperties": {
+    "viewLayout": {
+      "$jason": {
+        "head": {
+          "title": "quickApp_device_0"
+        },
+        "body": {
+          "header": {
+            "style": {
+              "height": "0"
+            },
+            "title": "quickApp_device_0"
+          },
+          "sections": {
+            "items": [
+              {
+                "components": [
+                  {
+                    "name": "lblTitle",
+                    "style": {
+                      "weight": "1"
+                    },
+                    "text": "BWT AQA Life Salt Monitor",
+                    "type": "label"
+                  }
+                ],
+                "style": {
+                  "weight": "0.7"
+                },
+                "type": "vertical"
+              },
+              {
+                "components": [
+                  {
+                    "name": "lblStatus",
+                    "style": {
+                      "weight": "1"
+                    },
+                    "text": "Starting",
+                    "type": "label"
+                  }
+                ],
+                "style": {
+                  "weight": "0.7"
+                },
+                "type": "vertical"
+              },
+              {
+                "components": [
+                  {
+                    "name": "lblSalt",
+                    "style": {
+                      "weight": "1"
+                    },
+                    "text": "-- kg remaining",
+                    "type": "label"
+                  }
+                ],
+                "style": {
+                  "weight": "0.7"
+                },
+                "type": "vertical"
+              },
+              {
+                "components": [
+                  {
+                    "name": "lblWater",
+                    "style": {
+                      "weight": "1"
+                    },
+                    "text": "Waiting for Multical21 Reader",
+                    "type": "label"
+                  }
+                ],
+                "style": {
+                  "weight": "0.7"
+                },
+                "type": "vertical"
+              },
+              {
+                "components": [
+                  {
+                    "name": "lblModel",
+                    "style": {
+                      "weight": "1"
+                    },
+                    "text": "Model not calculated",
+                    "type": "label"
+                  }
+                ],
+                "style": {
+                  "weight": "0.7"
+                },
+                "type": "vertical"
+              },
+              {
+                "components": [
+                  {
+                    "name": "lblEstimate",
+                    "style": {
+                      "weight": "1"
+                    },
+                    "text": "Estimate not calculated",
+                    "type": "label"
+                  }
+                ],
+                "style": {
+                  "weight": "0.7"
+                },
+                "type": "vertical"
+              },
+              {
+                "components": [
+                  {
+                    "name": "butRefresh",
+                    "style": {
+                      "weight": "1"
+                    },
+                    "text": "Refresh",
+                    "type": "button"
+                  },
+                  {
+                    "name": "butAdd25",
+                    "style": {
+                      "weight": "1"
+                    },
+                    "text": "Add 25 kg",
+                    "type": "button"
+                  },
+                  {
+                    "name": "butAdd10",
+                    "style": {
+                      "weight": "1"
+                    },
+                    "text": "Add 10 kg",
+                    "type": "button"
+                  },
+                  {
+                    "name": "butReset25",
+                    "style": {
+                      "weight": "1"
+                    },
+                    "text": "Reset to 25 kg",
+                    "type": "button"
+                  }
+                ],
+                "style": {
+                  "weight": "1.0"
+                },
+                "type": "horizontal"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "uiCallbacks": [
+      {
+        "callback": "buttonRefresh",
+        "eventType": "onReleased",
+        "name": "butRefresh"
+      },
+      {
+        "callback": "buttonAdd25",
+        "eventType": "onReleased",
+        "name": "butAdd25"
+      },
+      {
+        "callback": "buttonAdd10",
+        "eventType": "onReleased",
+        "name": "butAdd10"
+      },
+      {
+        "callback": "buttonReset25",
+        "eventType": "onReleased",
+        "name": "butReset25"
+      }
+    ],
+    "quickAppVariables": [
+      {
+        "name": "waterMeterUrl",
+        "value": "http://multical21.local/data.json"
+      },
+      {
+        "name": "pollSeconds",
+        "value": "300"
+      },
+      {
+        "name": "staleAfterSeconds",
+        "value": "7200"
+      },
+      {
+        "name": "initialSaltKg",
+        "value": "25"
+      },
+      {
+        "name": "saltRemainingKg",
+        "value": "0"
+      },
+      {
+        "name": "lastTotalM3",
+        "value": "0"
+      },
+      {
+        "name": "lastFillKg",
+        "value": "0"
+      },
+      {
+        "name": "lastFillEpoch",
+        "value": "0"
+      },
+      {
+        "name": "lastAlarmLevel",
+        "value": "ok"
+      },
+      {
+        "name": "warningThresholdKg",
+        "value": "10"
+      },
+      {
+        "name": "alarmThresholdKg",
+        "value": "5"
+      },
+      {
+        "name": "rawHardnessDh",
+        "value": "21"
+      },
+      {
+        "name": "targetHardnessDh",
+        "value": "6"
+      },
+      {
+        "name": "capacityM3DhPerKg",
+        "value": "24.1"
+      },
+      {
+        "name": "saltKgPerM3",
+        "value": "0"
+      },
+      {
+        "name": "pushEnabled",
+        "value": "false"
+      },
+      {
+        "name": "pushUserId",
+        "value": "0"
+      }
+    ],
+    "typeTemplateInitialized": true
+  },
+  "files": [
+    {
+      "name": "main",
+      "isMain": true,
+      "isOpen": true,
+      "content": "-- BWT AQA Life Salt Monitor for Fibaro HC3\n-- Reads Multical21 Reader /data.json and estimates remaining softener salt.\n\nlocal VERSION = \"0.1.0\"\n\nlocal function toNumber(value, fallback)\n  local n = tonumber(value)\n  if n == nil then\n    return fallback\n  end\n  return n\nend\n\nlocal function toBool(value, fallback)\n  if value == nil or value == \"\" then\n    return fallback\n  end\n  value = tostring(value):lower()\n  return value == \"true\" or value == \"1\" or value == \"yes\" or value == \"on\"\nend\n\nlocal function round(value, decimals)\n  local factor = 10 ^ (decimals or 0)\n  return math.floor(value * factor + 0.5) / factor\nend\n\nlocal function now()\n  return os.time()\nend\n\nfunction QuickApp:getVar(name, fallback)\n  local value = self:getVariable(name)\n  if value == nil or value == \"\" then\n    return fallback\n  end\n  return value\nend\n\nfunction QuickApp:setVar(name, value)\n  self:setVariable(name, tostring(value))\nend\n\nfunction QuickApp:updateLabel(name, text)\n  self:updateView(name, \"text\", tostring(text))\nend\n\nfunction QuickApp:config()\n  local cfg = {}\n  cfg.waterMeterUrl = self:getVar(\"waterMeterUrl\", \"http://multical21.local/data.json\")\n  cfg.pollSeconds = math.max(30, toNumber(self:getVar(\"pollSeconds\", \"300\"), 300))\n  cfg.staleAfterSeconds = math.max(60, toNumber(self:getVar(\"staleAfterSeconds\", \"7200\"), 7200))\n  cfg.alarmThresholdKg = math.max(0, toNumber(self:getVar(\"alarmThresholdKg\", \"5\"), 5))\n  cfg.warningThresholdKg = math.max(cfg.alarmThresholdKg, toNumber(self:getVar(\"warningThresholdKg\", \"10\"), 10))\n  cfg.pushEnabled = toBool(self:getVar(\"pushEnabled\", \"false\"), false)\n  cfg.pushUserId = toNumber(self:getVar(\"pushUserId\", \"0\"), 0)\n  cfg.rawHardnessDh = toNumber(self:getVar(\"rawHardnessDh\", \"21\"), 21)\n  cfg.targetHardnessDh = toNumber(self:getVar(\"targetHardnessDh\", \"6\"), 6)\n  cfg.capacityM3DhPerKg = toNumber(self:getVar(\"capacityM3DhPerKg\", \"24.1\"), 24.1)\n  cfg.manualSaltKgPerM3 = toNumber(self:getVar(\"saltKgPerM3\", \"0\"), 0)\n  return cfg\nend\n\nfunction QuickApp:saltKgPerM3(cfg)\n  if cfg.manualSaltKgPerM3 > 0 then\n    return cfg.manualSaltKgPerM3\n  end\n\n  local removedHardness = math.max(0, cfg.rawHardnessDh - cfg.targetHardnessDh)\n  if removedHardness <= 0 or cfg.capacityM3DhPerKg <= 0 then\n    return 0\n  end\n\n  return removedHardness / cfg.capacityM3DhPerKg\nend\n\nfunction QuickApp:loadState()\n  self.saltRemainingKg = toNumber(self:getVar(\"saltRemainingKg\", \"0\"), 0)\n  self.lastTotalM3 = toNumber(self:getVar(\"lastTotalM3\", \"0\"), 0)\n  self.lastFillEpoch = toNumber(self:getVar(\"lastFillEpoch\", \"0\"), 0)\n  self.lastAlarmLevel = self:getVar(\"lastAlarmLevel\", \"ok\")\nend\n\nfunction QuickApp:saveState()\n  self:setVar(\"saltRemainingKg\", round(self.saltRemainingKg, 3))\n  self:setVar(\"lastTotalM3\", round(self.lastTotalM3, 3))\n  self:setVar(\"lastFillEpoch\", self.lastFillEpoch)\n  self:setVar(\"lastAlarmLevel\", self.lastAlarmLevel)\nend\n\nfunction QuickApp:setStatus(level, message)\n  local value = false\n  if level == \"alarm\" then\n    value = true\n  end\n  self:updateProperty(\"value\", value)\n  self:updateProperty(\"log\", message)\n  self:updateLabel(\"lblStatus\", message)\nend\n\nfunction QuickApp:notify(level, message)\n  local cfg = self:config()\n  if self.lastAlarmLevel == level then\n    return\n  end\n\n  self.lastAlarmLevel = level\n  self:saveState()\n\n  if cfg.pushEnabled and cfg.pushUserId > 0 then\n    fibaro.alert(\"push\", {cfg.pushUserId}, message)\n  end\nend\n\nfunction QuickApp:updateUi(data, saltPerM3, consumedSinceFill)\n  local cfg = self:config()\n  local daysLeftText = \"-\"\n  local last24 = toNumber(data.last_24h_m3, 0)\n  local dailySalt = last24 * saltPerM3\n  if dailySalt > 0 then\n    daysLeftText = tostring(math.floor(self.saltRemainingKg / dailySalt)) .. \" days\"\n  end\n\n  self:updateLabel(\"lblSalt\", string.format(\"%.1f kg remaining\", self.saltRemainingKg))\n  self:updateLabel(\"lblWater\", string.format(\"%.3f m3 total, %.3f m3 last 24h\", toNumber(data.total_m3, 0), last24))\n  self:updateLabel(\"lblModel\", string.format(\"%.3f kg/m3, %.1f kg used since fill\", saltPerM3, consumedSinceFill))\n  self:updateLabel(\"lblEstimate\", string.format(\"Warning %.1f kg, alarm %.1f kg, %s left\", cfg.warningThresholdKg, cfg.alarmThresholdKg, daysLeftText))\nend\n\nfunction QuickApp:evaluate(data)\n  local cfg = self:config()\n  local saltPerM3 = self:saltKgPerM3(cfg)\n  local totalM3 = toNumber(data.total_m3, nil)\n\n  if not data.valid or totalM3 == nil then\n    self:setStatus(\"warn\", \"No valid water meter data\")\n    return\n  end\n\n  if data.last_frame_age_s ~= nil and toNumber(data.last_frame_age_s, 0) > cfg.staleAfterSeconds then\n    self:setStatus(\"warn\", \"Water meter data is stale\")\n    return\n  end\n\n  if self.lastTotalM3 <= 0 then\n    self.lastTotalM3 = totalM3\n    self:saveState()\n  end\n\n  local deltaM3 = totalM3 - self.lastTotalM3\n  if deltaM3 < 0 then\n    self:warning(\"Water total went backwards; resetting baseline\")\n    deltaM3 = 0\n  end\n\n  local consumedKg = deltaM3 * saltPerM3\n  if consumedKg > 0 then\n    self.saltRemainingKg = math.max(0, self.saltRemainingKg - consumedKg)\n    self.lastTotalM3 = totalM3\n    self:saveState()\n  end\n\n  local usedSinceFillKg = 0\n  local fillKg = toNumber(self:getVar(\"lastFillKg\", \"0\"), 0)\n  if fillKg > 0 then\n    usedSinceFillKg = math.max(0, fillKg - self.saltRemainingKg)\n  end\n\n  self:updateUi(data, saltPerM3, usedSinceFillKg)\n\n  if self.saltRemainingKg <= cfg.alarmThresholdKg then\n    local msg = string.format(\"BWT salt alarm: %.1f kg estimated remaining\", self.saltRemainingKg)\n    self:setStatus(\"alarm\", msg)\n    self:notify(\"alarm\", msg)\n  elseif self.saltRemainingKg <= cfg.warningThresholdKg then\n    local msg = string.format(\"BWT salt warning: %.1f kg estimated remaining\", self.saltRemainingKg)\n    self:setStatus(\"warn\", msg)\n    self:notify(\"warn\", msg)\n  else\n    self:setStatus(\"ok\", \"BWT salt estimate OK\")\n    self.lastAlarmLevel = \"ok\"\n    self:saveState()\n  end\nend\n\nfunction QuickApp:poll()\n  local cfg = self:config()\n  net.HTTPClient():request(cfg.waterMeterUrl, {\n    options = {\n      method = \"GET\",\n      timeout = 8000,\n      headers = {[\"Accept\"] = \"application/json\"}\n    },\n    success = function(response)\n      if response.status < 200 or response.status >= 300 then\n        self:setStatus(\"warn\", \"Water meter HTTP \" .. tostring(response.status))\n        return\n      end\n\n      local ok, data = pcall(json.decode, response.data)\n      if not ok or type(data) ~= \"table\" then\n        self:setStatus(\"warn\", \"Water meter JSON parse failed\")\n        return\n      end\n\n      self:evaluate(data)\n    end,\n    error = function(err)\n      self:setStatus(\"warn\", \"Water meter request failed: \" .. tostring(err))\n    end\n  })\nend\n\nfunction QuickApp:refillSalt(kg)\n  kg = toNumber(kg, nil)\n  if kg == nil or kg <= 0 then\n    self:warning(\"refillSalt requires kg > 0\")\n    return\n  end\n\n  self.saltRemainingKg = self.saltRemainingKg + kg\n  self.lastFillEpoch = now()\n  self:setVar(\"lastFillKg\", self.saltRemainingKg)\n  self.lastAlarmLevel = \"ok\"\n  self:saveState()\n  self:poll()\nend\n\nfunction QuickApp:buttonAdd25()\n  self:refillSalt(25)\nend\n\nfunction QuickApp:buttonAdd10()\n  self:refillSalt(10)\nend\n\nfunction QuickApp:buttonReset25()\n  self.saltRemainingKg = 25\n  self.lastFillEpoch = now()\n  self:setVar(\"lastFillKg\", 25)\n  self.lastAlarmLevel = \"ok\"\n  self:saveState()\n  self:poll()\nend\n\nfunction QuickApp:buttonRefresh()\n  self:poll()\nend\n\nfunction QuickApp:scheduleNextPoll()\n  local cfg = self:config()\n  fibaro.setTimeout(cfg.pollSeconds * 1000, function()\n    self:poll()\n    self:scheduleNextPoll()\n  end)\nend\n\nfunction QuickApp:onInit()\n  self:debug(\"BWT Salt Monitor \" .. VERSION .. \" starting, deviceId \" .. tostring(self.id))\n  self:loadState()\n\n  if self.saltRemainingKg <= 0 then\n    self.saltRemainingKg = toNumber(self:getVar(\"initialSaltKg\", \"25\"), 25)\n    self:setVar(\"lastFillKg\", self.saltRemainingKg)\n    self.lastFillEpoch = now()\n    self:saveState()\n  end\n\n  self:updateLabel(\"lblTitle\", \"BWT AQA Life Salt Monitor \" .. VERSION)\n  self:poll()\n  self:scheduleNextPoll()\nend\n"
+    }
+  ]
+}
