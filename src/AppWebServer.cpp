@@ -487,21 +487,15 @@ void AppWebServer::handleRoot() {
 
   body += F("<article class=\"card accentUsage\"><div class=\"cardTop\"><span>Hourly Usage</span><b class=\"chip ok\">History</b></div><strong><span id=\"hourlyUsage\">");
   body += formatM3(history.getHourMilliM3(0));
-  body += F("</span> m3</strong><small>Current hour, <span id=\"last24Usage\">");
-  body += formatM3(history.getLast24HoursMilliM3());
-  body += F("</span> m3 last 24h</small></article>");
+  body += F("</span> m3</strong><small>Current hour water use</small></article>");
 
   body += F("<article class=\"card accentDaily\"><div class=\"cardTop\"><span>Daily Usage</span><b class=\"chip ok\">Today</b></div><strong><span id=\"todayUsage\">");
   body += formatM3(history.getTodayMilliM3());
-  body += F("</span> m3</strong><small>Today, <span id=\"last31Usage\">");
-  body += formatM3(history.getLast31DaysMilliM3());
-  body += F("</span> m3 last 31d</small></article>");
+  body += F("</span> m3</strong><small>Today water use</small></article>");
 
   body += F("<article class=\"card accentWeekly\"><div class=\"cardTop\"><span>Weekly Usage</span><b class=\"chip ok\">Week</b></div><strong><span id=\"weeklyUsage\">");
   body += formatM3(history.getWeekMilliM3(0));
-  body += F("</span> m3</strong><small>This week, <span id=\"last53Usage\">");
-  body += formatM3(history.getLast53WeeksMilliM3());
-  body += F("</span> m3 last 53w</small></article>");
+  body += F("</span> m3</strong><small>This week water use</small></article>");
 
   body += F("<article class=\"card accentMeter\"><div class=\"cardTop\"><span>Meter Details</span><b class=\"chip ");
   body += config.hasMeter() ? F("ok\">Configured") : F("warn\">Missing");
@@ -989,7 +983,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += body;
   html += F("</main><script>");
   html += F("function byId(i){return document.getElementById(i)}function txt(i,v){const e=byId(i);if(e)e.textContent=v}function pill(i,c){const e=byId(i);if(e)e.className='statusPill '+c}function chip(i,c,t){const e=byId(i);if(e){e.className='chip '+c;e.textContent=t}}function rssiClass(v){if(v===null||v===undefined)return'statusOff';if(v>=-85)return'statusOk';if(v>=-100)return'statusWarn';return'statusAlarm'}");
-  html += F("async function refreshData(){if(!byId('topFrameText'))return;try{const j=await (await fetch('/data.json',{cache:'no-store'})).json();const age=j.last_frame_age_s;const live=j.valid&&age<90;const a=j.alarms||{};const alarm=a.burst||a.leak;const warn=a.dry||a.reverse;pill('topFramePill',live?'statusOk':(j.valid?'statusWarn':'statusOff'));txt('topFrameText',live?'Frame live':(j.valid?'Frame '+age+'s':'No frame'));pill('topSignalPill',rssiClass(j.radio_rssi_dbm));txt('topSignalText',j.radio_rssi_dbm===null?'Radio --':'Radio '+j.radio_rssi_dbm);pill('topDataPill',!j.valid?'statusOff':(alarm?'statusAlarm':(warn?'statusWarn':'statusOk')));txt('topDataText',j.valid?(j.meter_status||'Meter OK'):'No data');pill('topTimePill',j.time_synced?'statusOk':(j.ntp_enabled?'statusWarn':'statusOff'));txt('topTimeText',j.time_synced?'NTP OK':(j.ntp_enabled?'NTP wait':'NTP off'));txt('heroText',j.valid?'Live water meter data is being decoded and stored locally.':'Waiting for the first valid wireless M-Bus frame.');txt('heroRxAge',j.valid?age+' s':'--');txt('waterTotal',j.valid?Number(j.total_m3).toFixed(3):'--');txt('monthUsage',j.valid?Number(j.month_usage_m3).toFixed(3)+' m3':'-');chip('waterChip',j.valid?'ok':'warn',j.valid?'Live':'Waiting');txt('hourlyUsage',Number(j.current_hour_m3).toFixed(3));txt('last24Usage',Number(j.last_24h_m3).toFixed(3));txt('todayUsage',Number(j.today_m3).toFixed(3));txt('last31Usage',Number(j.last_31d_m3).toFixed(3));txt('weeklyUsage',Number(j.current_week_m3).toFixed(3));txt('last53Usage',Number(j.last_53w_m3).toFixed(3));txt('waterTemp',j.valid?j.water_temperature_c+' C':'--');txt('roomTemp',j.valid?j.ambient_temperature_c+' C':'--')}catch(e){}}setInterval(refreshData,5000);refreshData();");
+  html += F("async function refreshData(){if(!byId('topFrameText'))return;try{const j=await (await fetch('/data.json',{cache:'no-store'})).json();const age=j.last_frame_age_s;const live=j.valid&&age<90;const a=j.alarms||{};const alarm=a.burst||a.leak;const warn=a.dry||a.reverse;pill('topFramePill',live?'statusOk':(j.valid?'statusWarn':'statusOff'));txt('topFrameText',live?'Frame live':(j.valid?'Frame '+age+'s':'No frame'));pill('topSignalPill',rssiClass(j.radio_rssi_dbm));txt('topSignalText',j.radio_rssi_dbm===null?'Radio --':'Radio '+j.radio_rssi_dbm);pill('topDataPill',!j.valid?'statusOff':(alarm?'statusAlarm':(warn?'statusWarn':'statusOk')));txt('topDataText',j.valid?(j.meter_status||'Meter OK'):'No data');pill('topTimePill',j.time_synced?'statusOk':(j.ntp_enabled?'statusWarn':'statusOff'));txt('topTimeText',j.time_synced?'NTP OK':(j.ntp_enabled?'NTP wait':'NTP off'));txt('heroText',j.valid?'Live water meter data is being decoded and stored locally.':'Waiting for the first valid wireless M-Bus frame.');txt('heroRxAge',j.valid?age+' s':'--');txt('waterTotal',j.valid?Number(j.total_m3).toFixed(3):'--');txt('monthUsage',j.valid?Number(j.month_usage_m3).toFixed(3)+' m3':'-');chip('waterChip',j.valid?'ok':'warn',j.valid?'Live':'Waiting');txt('hourlyUsage',Number(j.current_hour_m3).toFixed(3));txt('todayUsage',Number(j.today_m3).toFixed(3));txt('weeklyUsage',Number(j.current_week_m3).toFixed(3));txt('waterTemp',j.valid?j.water_temperature_c+' C':'--');txt('roomTemp',j.valid?j.ambient_temperature_c+' C':'--')}catch(e){}}setInterval(refreshData,5000);refreshData();");
   html += F("async function scanWifi(){const r=document.getElementById('wifiResult'),l=document.getElementById('wifiList');r.textContent='Scanning...';l.innerHTML='';try{const j=await (await fetch('/wifiscan.json')).json();r.textContent=j.networks.length+' networks';j.networks.forEach(n=>{const d=document.createElement('div');d.className='wifiNet';d.innerHTML='<strong></strong><small></small>';d.querySelector('strong').textContent=n.ssid||'(hidden)';d.querySelector('small').textContent=n.rssi+' dBm ch '+n.channel+(n.secure?' secure':' open');d.onclick=()=>{document.getElementById('wifiSsid').value=n.ssid};l.appendChild(d)})}catch(e){r.textContent='Scan failed'}}");
   html += F("async function testWifi(){const r=document.getElementById('wifiResult');r.textContent='Testing...';const body=new URLSearchParams({ssid:document.getElementById('wifiSsid').value,password:document.getElementById('wifiPassword').value});try{const j=await (await fetch('/wifitest.json',{method:'POST',body})).json();r.textContent=j.ok?'Connected: '+j.ip:'Failed, status '+j.status}catch(e){r.textContent='Test failed'}}");
   html += F("</script></body></html>");
