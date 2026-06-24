@@ -9,6 +9,8 @@ Assistant integration, and OTA updates.
 
 See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the current architecture and
 milestone plan.
+<img width="1242" height="985" alt="image" src="https://github.com/user-attachments/assets/7eeaec00-6541-421b-8f9d-141c903ef639" />
+<img width="1242" height="1207" alt="image" src="https://github.com/user-attachments/assets/82798402-5b35-46f1-8b8c-3aa0b3f0a1fe" />
 
 Current firmware baseline:
 
