@@ -1,7 +1,7 @@
 -- BWT AQA Life Salt Monitor for Fibaro HC3
 -- Reads Multical21 Reader /data.json and estimates remaining softener salt.
 
-local VERSION = "0.1.4"
+local VERSION = "0.1.5"
 
 local function toNumber(value, fallback)
   local n = tonumber(value)
@@ -53,6 +53,9 @@ function QuickApp:config()
   cfg.warningThresholdKg = math.max(cfg.alarmThresholdKg, toNumber(self:getVar("warningThresholdKg", "10"), 10))
   cfg.pushEnabled = toBool(self:getVar("pushEnabled", "false"), false)
   cfg.pushUserId = toNumber(self:getVar("pushUserId", "0"), 0)
+  cfg.emailEnabled = toBool(self:getVar("emailEnabled", "false"), false)
+  cfg.emailUserId = toNumber(self:getVar("emailUserId", "0"), 0)
+  cfg.emailSubject = self:getVar("emailSubject", "BWT salt monitor")
   cfg.rawHardnessDh = toNumber(self:getVar("rawHardnessDh", "25"), 25)
   cfg.targetHardnessDh = toNumber(self:getVar("targetHardnessDh", "6"), 6)
   cfg.saltKgPerRegen = toNumber(self:getVar("saltKgPerRegen", "0.25"), 0.25)
@@ -118,8 +121,27 @@ function QuickApp:notify(level, message)
   self.lastAlarmLevel = level
   self:saveState()
 
+  self:sendNotifications(cfg, level, message)
+end
+
+function QuickApp:sendNotifications(cfg, level, message)
   if cfg.pushEnabled and cfg.pushUserId > 0 then
-    fibaro.alert("push", {cfg.pushUserId}, message)
+    local ok, err = pcall(function()
+      fibaro.alert("push", {cfg.pushUserId}, message)
+    end)
+    if not ok then
+      self:warning("Push notification failed: " .. tostring(err))
+    end
+  end
+
+  if cfg.emailEnabled and cfg.emailUserId > 0 then
+    local subject = cfg.emailSubject .. " - " .. level
+    local ok, err = pcall(function()
+      fibaro.call(cfg.emailUserId, "sendEmail", subject, message)
+    end)
+    if not ok then
+      self:warning("Email notification failed: " .. tostring(err))
+    end
   end
 end
 
@@ -261,6 +283,13 @@ end
 
 function QuickApp:buttonRefresh()
   self:poll()
+end
+
+function QuickApp:buttonTestAlert()
+  local cfg = self:config()
+  local message = string.format("BWT salt monitor test: %.1f kg estimated remaining", self.saltRemainingKg or 0)
+  self:sendNotifications(cfg, "test", message)
+  self:updateLabel("lblStatus", "Test notification sent")
 end
 
 function QuickApp:onSliderRawHardnessChanged(event)

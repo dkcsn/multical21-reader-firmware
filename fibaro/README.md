@@ -86,6 +86,9 @@ With the default factor:
 - `rinseWaterLiterPerM3`: Informational rinse water estimate.
 - `pushEnabled`: `true` to send HC3 push alert.
 - `pushUserId`: HC3 user ID for push alert.
+- `emailEnabled`: `true` to send HC3 email alert.
+- `emailUserId`: HC3 user ID for email alert.
+- `emailSubject`: Email subject prefix.
 
 ## Calibration
 
@@ -101,4 +104,21 @@ Best calibration flow:
 
 - Do you normally pour full `25 kg` bags, or smaller amounts?
 - At what remaining amount should Fibaro warn you, for example `5 kg`?
-- Should it send push notifications, and to which HC3 user ID?
+- Should it send push/email notifications, and to which HC3 user ID?
+
+## Notifications
+
+The QuickApp is a `com.fibaro.binarySwitch` on purpose:
+
+- `OFF`: no critical salt alarm.
+- `ON`: critical salt alarm.
+
+This makes it easy to use the QuickApp as a Fibaro scene trigger. The QuickApp
+can also send notifications directly:
+
+- Push: `fibaro.alert("push", {pushUserId}, message)`
+- Email: `fibaro.call(emailUserId, "sendEmail", subject, message)`
+
+The email address itself is configured on the HC3 user account. SMS is best
+handled by a Fibaro scene or external gateway/service reacting to the binary
+switch alarm state.

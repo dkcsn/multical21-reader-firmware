@@ -113,9 +113,40 @@ The QuickApp can send Fibaro push notifications if these variables are set:
   pushEnabled = true
   pushUserId = your HC3 user ID
 
-Email/SMS are best handled by a Fibaro scene reacting to the QuickApp alarm
-state, because available delivery channels depend on the local HC3/Fibaro
-setup.
+Email Notifications
+-------------------
+The QuickApp can send email through the HC3 user notification system if these
+variables are set:
+
+  emailEnabled = true
+  emailUserId = your HC3 user ID
+  emailSubject = BWT salt monitor
+
+The QuickApp uses:
+
+  fibaro.call(emailUserId, "sendEmail", subject, message)
+
+The email address itself is configured on the HC3 user account.
+
+SMS
+---
+SMS is not sent directly by this QuickApp. Use a Fibaro scene reacting to this
+QuickApp alarm state, or an external gateway/service, if SMS is required.
+
+Test Alert
+----------
+Use the "Test alert" button after setting push/email variables. It sends a test
+notification without changing the salt estimate.
+
+Binary Switch
+-------------
+The QuickApp is a binary switch on purpose:
+
+  OFF = no critical salt alarm
+  ON  = critical salt alarm
+
+This makes it simple to trigger Fibaro scenes when salt reaches the alarm
+threshold.
 
 Calibration
 -----------
