@@ -1,7 +1,7 @@
 -- BWT AQA Life Salt Monitor for Fibaro HC3
 -- Reads Multical21 Reader /data.json and estimates remaining softener salt.
 
-local VERSION = "0.1.3"
+local VERSION = "0.1.4"
 
 local function toNumber(value, fallback)
   local n = tonumber(value)
@@ -55,18 +55,34 @@ function QuickApp:config()
   cfg.pushUserId = toNumber(self:getVar("pushUserId", "0"), 0)
   cfg.rawHardnessDh = toNumber(self:getVar("rawHardnessDh", "25"), 25)
   cfg.targetHardnessDh = toNumber(self:getVar("targetHardnessDh", "6"), 6)
-  cfg.saltKgPerM3PerDh = toNumber(self:getVar("saltKgPerM3PerDh", "0.0415"), 0.0415)
+  cfg.saltKgPerRegen = toNumber(self:getVar("saltKgPerRegen", "0.25"), 0.25)
+  cfg.capacityMolPerKgSalt = toNumber(self:getVar("capacityMolPerKgSalt", "4.3"), 4.3)
+  cfg.m3DhPerMol = toNumber(self:getVar("m3DhPerMol", "5.6"), 5.6)
   cfg.manualSaltKgPerM3 = toNumber(self:getVar("saltKgPerM3", "0"), 0)
   cfg.rinseWaterLiterPerM3 = toNumber(self:getVar("rinseWaterLiterPerM3", "58"), 58)
   return cfg
 end
 
-function QuickApp:saltKgPerM3(cfg)
-  if cfg.manualSaltKgPerM3 > 0 then
-    return cfg.manualSaltKgPerM3
+function QuickApp:saltModel(cfg)
+  local model = {}
+  model.removedDh = math.max(0, cfg.rawHardnessDh - cfg.targetHardnessDh)
+  model.capacityM3DhPerRegen = cfg.saltKgPerRegen * cfg.capacityMolPerKgSalt * cfg.m3DhPerMol
+  model.capacityM3PerRegen = 0
+  model.saltKgPerM3 = 0
+
+  if model.removedDh > 0 and model.capacityM3DhPerRegen > 0 then
+    model.capacityM3PerRegen = model.capacityM3DhPerRegen / model.removedDh
+    model.saltKgPerM3 = cfg.saltKgPerRegen / model.capacityM3PerRegen
   end
 
-  return math.max(0, cfg.rawHardnessDh - cfg.targetHardnessDh) * cfg.saltKgPerM3PerDh
+  if cfg.manualSaltKgPerM3 > 0 then
+    model.saltKgPerM3 = cfg.manualSaltKgPerM3
+    if cfg.saltKgPerRegen > 0 then
+      model.capacityM3PerRegen = cfg.saltKgPerRegen / cfg.manualSaltKgPerM3
+    end
+  end
+
+  return model
 end
 
 function QuickApp:loadState()
@@ -107,25 +123,29 @@ function QuickApp:notify(level, message)
   end
 end
 
-function QuickApp:updateUi(data, saltPerM3, consumedSinceFill)
+function QuickApp:updateUi(data, model, consumedSinceFill)
   local cfg = self:config()
   local daysLeftText = "-"
   local last24 = toNumber(data.last_24h_m3, 0)
-  local dailySalt = last24 * saltPerM3
+  local dailySalt = last24 * model.saltKgPerM3
   if dailySalt > 0 then
     daysLeftText = tostring(math.floor(self.saltRemainingKg / dailySalt)) .. " days"
+  end
+  local regenSinceFill = 0
+  if cfg.saltKgPerRegen > 0 then
+    regenSinceFill = consumedSinceFill / cfg.saltKgPerRegen
   end
 
   self:updateLabel("lblSalt", string.format("%.1f kg remaining", self.saltRemainingKg))
   self:updateLabel("lblWater", string.format("%.3f m3 total, %.3f m3 last 24h", toNumber(data.total_m3, 0), last24))
-  self:updateLabel("lblModel", string.format("%.1f -> %.1f dH, %.3f kg/m3 salt, %.0f L/m3 rinse", cfg.rawHardnessDh, cfg.targetHardnessDh, saltPerM3, cfg.rinseWaterLiterPerM3))
-  self:updateLabel("lblUsed", string.format("%.1f kg used since fill", consumedSinceFill))
+  self:updateLabel("lblModel", string.format("%.1f -> %.1f dH, %.0f L/regen, %.3f kg/m3", cfg.rawHardnessDh, cfg.targetHardnessDh, model.capacityM3PerRegen * 1000, model.saltKgPerM3))
+  self:updateLabel("lblUsed", string.format("%.1f kg used, %.1f regen since fill", consumedSinceFill, regenSinceFill))
   self:updateLabel("lblEstimate", string.format("Warning %.1f kg, alarm %.1f kg, %s left", cfg.warningThresholdKg, cfg.alarmThresholdKg, daysLeftText))
 end
 
 function QuickApp:evaluate(data)
   local cfg = self:config()
-  local saltPerM3 = self:saltKgPerM3(cfg)
+  local model = self:saltModel(cfg)
   local totalM3 = toNumber(data.total_m3, nil)
 
   if not data.valid or totalM3 == nil then
@@ -149,7 +169,7 @@ function QuickApp:evaluate(data)
     deltaM3 = 0
   end
 
-  local consumedKg = deltaM3 * saltPerM3
+  local consumedKg = deltaM3 * model.saltKgPerM3
   if consumedKg > 0 then
     self.saltRemainingKg = math.max(0, self.saltRemainingKg - consumedKg)
     self.lastTotalM3 = totalM3
@@ -162,7 +182,7 @@ function QuickApp:evaluate(data)
     usedSinceFillKg = math.max(0, fillKg - self.saltRemainingKg)
   end
 
-  self:updateUi(data, saltPerM3, usedSinceFillKg)
+  self:updateUi(data, model, usedSinceFillKg)
 
   if self.saltRemainingKg <= cfg.alarmThresholdKg then
     local msg = string.format("BWT salt alarm: %.1f kg estimated remaining", self.saltRemainingKg)

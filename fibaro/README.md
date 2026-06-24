@@ -29,21 +29,28 @@ The QuickApp uses a conservative calibrated default for Glostrup/BWT AQA Life:
 
 - Raw water hardness: approximately `25 dH`
 - Target output hardness: `6 dH`
+- Salt per regeneration: `0.25 kg`
+- Capacity per kg salt: `4.3 mol`
 - Active salt model: approximately `0.79 kg/m3` at `25 -> 6 dH`
-- Salt model factor: `0.0415 kg/m3 per removed dH`
+- Estimated regeneration interval: approximately `317 L` at `25 -> 6 dH`
 - Rinse water estimate: `58 L/m3`
 
 The model is:
 
 ```text
-saltKgPerM3 = (rawHardnessDh - targetHardnessDh) * saltKgPerM3PerDh
+removedDh = rawHardnessDh - targetHardnessDh
+capacityM3DhPerRegen = saltKgPerRegen * capacityMolPerKgSalt * 5.6
+capacityM3PerRegen = capacityM3DhPerRegen / removedDh
+saltKgPerM3 = saltKgPerRegen / capacityM3PerRegen
 ```
 
 Default values:
 
 - `rawHardnessDh = 25`
 - `targetHardnessDh = 6`
-- `saltKgPerM3PerDh = 0.0415`
+- `saltKgPerRegen = 0.25`
+- `capacityMolPerKgSalt = 4.3`
+- `m3DhPerMol = 5.6`
 - `saltKgPerM3 = 0`
 - `rinseWaterLiterPerM3 = 58`
 
@@ -53,8 +60,8 @@ zero.
 
 With the default factor:
 
-- `25 -> 6 dH`: `(25 - 6) * 0.0415 = 0.79 kg/m3`
-- `28 -> 6 dH`: `(28 - 6) * 0.0415 = 0.91 kg/m3`
+- `25 -> 6 dH`: approximately `317 L/regen` and `0.79 kg/m3`
+- `28 -> 6 dH`: approximately `274 L/regen` and `0.91 kg/m3`
 
 ## QuickApp Variables
 
@@ -68,7 +75,9 @@ With the default factor:
 - `warningThresholdKg`: Warning threshold, default `10`.
 - `rawHardnessDh`: Incoming water hardness.
 - `targetHardnessDh`: Softened/mixed output hardness.
-- `saltKgPerM3PerDh`: Calibrated hardness model factor.
+- `saltKgPerRegen`: Salt used per regeneration.
+- `capacityMolPerKgSalt`: BWT capacity per kg regenerant.
+- `m3DhPerMol`: Conversion factor from mol to m3*dH.
 - `saltKgPerM3`: Optional manual override.
 - `rinseWaterLiterPerM3`: Informational rinse water estimate.
 - `pushEnabled`: `true` to send HC3 push alert.
