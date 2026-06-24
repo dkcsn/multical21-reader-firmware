@@ -267,7 +267,7 @@ static String graphBars(WaterHistory& history, char period, time_t now) {
   }
 
   String out;
-  out.reserve(count * 110);
+  out.reserve(220 + count * 92);
   out += F("<div class=\"graphSummary\"><span>Total <strong>");
   out += formatM3(totalValue);
   out += F(" m3</strong></span><span>Peak <strong>");
@@ -277,17 +277,17 @@ static String graphBars(WaterHistory& history, char period, time_t now) {
     uint32_t value = graphValue(history, period, i);
     uint8_t height = value == 0 || maxValue == 0 ? 0 : (uint8_t) max(6UL, (unsigned long) value * 100UL / maxValue);
     String label = formatGraphLabel(now, i, period);
-    out += F("<div class=\"barwrap\" title=\"");
+    out += F("<i class=\"barwrap\" title=\"");
     out += label;
     out += F(": ");
     out += formatM3(value);
-    out += F(" m3\"><div class=\"bar\" style=\"height:");
+    out += F(" m3\"><b class=\"bar\" style=\"height:");
     out += height;
-    out += F("%\"></div><span>");
+    out += F("%\"></b><span>");
     out += label;
     out += F("</span><small>");
     out += formatM3(value);
-    out += F("</small></div>");
+    out += F("</small></i>");
   }
   out += F("</div>");
   return out;
@@ -532,7 +532,7 @@ void AppWebServer::handleGraphsPage() {
   time_t now = localTimeNow(config.data().timezoneOffsetMinutes);
   char period = selectedGraphPeriod(server.arg("view"));
   String body;
-  body.reserve(5200);
+  body.reserve(900 + graphCount(period) * 96);
   body += F("<section class=\"graphPanel\"><div class=\"tabs\">");
   body += graphTab('h', period, "Hours");
   body += graphTab('d', period, "Days");
@@ -947,7 +947,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F(".setupPanel{border-left:5px solid #0b7285}.setupForm{display:block}.formSection{border-top:1px solid #d9e2ec;padding-top:14px;margin-top:14px}.formSection:first-of-type{border-top:0;padding-top:0}.formSection h3{font-size:15px;margin:0 0 10px;color:#102a43}.formGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.actionRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.actionRow form{display:block}.actionRow button{min-width:170px}.statusLine{border:1px solid #d9e2ec;border-radius:6px;padding:10px;background:#f8fafc;display:grid;gap:4px;color:#52606d}.statusLine strong{color:#102a43}.statusLine small{font-size:12px;color:#627d98}.deviceActions{padding-bottom:0}.onboardingPanel{border-color:#0b7285;background:#f8fcfd}.onboardingPanel .sectionHead h2{font-size:24px}");
   html += F(".wifiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.wifiActions span{font-size:13px;color:#334e68}.wifiList{grid-column:1/-1;display:grid;gap:6px}.wifiNet{display:flex;justify-content:space-between;gap:10px;border:1px solid #d9e2ec;border-radius:6px;padding:8px;background:#f8fafc;cursor:pointer}.wifiNet small{color:#52606d}");
   html += F(".bars{height:180px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden;background:linear-gradient(to top,#f8fafc,#fff)}");
-  html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0}.barwrap:nth-child(2n) .bar{background:#147d64}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
+  html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px;font-style:normal}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0}.barwrap:nth-child(2n) .bar{background:#147d64}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
   html += F("@media(max-width:980px){header{grid-template-columns:1fr}.topRight{grid-template-columns:1fr}.statusGroup,.navLinks{justify-content:flex-start;flex-wrap:wrap}.statusGroup{overflow:visible}.navLinks{border-left:0;padding-left:0;border-top:1px solid #486581;padding-top:8px}}@media(max-width:640px){main{padding:12px}.hero{grid-template-columns:1fr}.hero h2{font-size:24px}dl{grid-template-columns:1fr}.heroMeter strong{font-size:30px}nav a span{display:none}.statusText{max-width:96px}}");
   html += F("</style></head><body><header><h1>Multical 21 Reader</h1><nav class=\"topRight\"><div class=\"statusGroup\">");
   html += F("<span id=\"topFramePill\" class=\"statusPill ");
