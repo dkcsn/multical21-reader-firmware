@@ -1,7 +1,7 @@
 -- BWT AQA Life Salt Monitor for Fibaro HC3
 -- Reads Multical21 Reader /data.json and estimates remaining softener salt.
 
-local VERSION = "0.1.2"
+local VERSION = "0.1.3"
 
 local function toNumber(value, fallback)
   local n = tonumber(value)
@@ -55,7 +55,7 @@ function QuickApp:config()
   cfg.pushUserId = toNumber(self:getVar("pushUserId", "0"), 0)
   cfg.rawHardnessDh = toNumber(self:getVar("rawHardnessDh", "25"), 25)
   cfg.targetHardnessDh = toNumber(self:getVar("targetHardnessDh", "6"), 6)
-  cfg.saltKgPerM3PerDh = toNumber(self:getVar("saltKgPerM3PerDh", "0.0474"), 0.0474)
+  cfg.saltKgPerM3PerDh = toNumber(self:getVar("saltKgPerM3PerDh", "0.0415"), 0.0415)
   cfg.manualSaltKgPerM3 = toNumber(self:getVar("saltKgPerM3", "0"), 0)
   cfg.rinseWaterLiterPerM3 = toNumber(self:getVar("rinseWaterLiterPerM3", "58"), 58)
   return cfg

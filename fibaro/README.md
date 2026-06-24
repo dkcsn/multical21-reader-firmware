@@ -29,8 +29,8 @@ The QuickApp uses a conservative calibrated default for Glostrup/BWT AQA Life:
 
 - Raw water hardness: approximately `25 dH`
 - Target output hardness: `6 dH`
-- Active salt model: approximately `0.9 kg/m3` at `25 -> 6 dH`
-- Salt model factor: `0.0474 kg/m3 per removed dH`
+- Active salt model: approximately `0.79 kg/m3` at `25 -> 6 dH`
+- Salt model factor: `0.0415 kg/m3 per removed dH`
 - Rinse water estimate: `58 L/m3`
 
 The model is:
@@ -43,13 +43,18 @@ Default values:
 
 - `rawHardnessDh = 25`
 - `targetHardnessDh = 6`
-- `saltKgPerM3PerDh = 0.0474`
+- `saltKgPerM3PerDh = 0.0415`
 - `saltKgPerM3 = 0`
 - `rinseWaterLiterPerM3 = 58`
 
 The QuickApp UI has sliders for raw hardness and target hardness. If you want
 to bypass the hardness model entirely, set `saltKgPerM3` to a value greater than
 zero.
+
+With the default factor:
+
+- `25 -> 6 dH`: `(25 - 6) * 0.0415 = 0.79 kg/m3`
+- `28 -> 6 dH`: `(28 - 6) * 0.0415 = 0.91 kg/m3`
 
 ## QuickApp Variables
 
