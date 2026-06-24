@@ -3,6 +3,10 @@
 This QuickApp estimates salt level for a BWT AQA Life softener by reading the
 Multical21 Reader local API.
 
+The importable `.fqa` also includes a non-main `Documentation` file with the
+calculation model and usage notes, so the explanation is visible inside the HC3
+QuickApp editor.
+
 ## Data Source
 
 The QuickApp reads:
