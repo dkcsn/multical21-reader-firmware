@@ -1,7 +1,7 @@
 -- BWT AQA Life Salt Monitor for Fibaro HC3
 -- Reads Multical21 Reader /data.json and estimates remaining softener salt.
 
-local VERSION = "0.1.1"
+local VERSION = "0.1.2"
 
 local function toNumber(value, fallback)
   local n = tonumber(value)
@@ -55,8 +55,8 @@ function QuickApp:config()
   cfg.pushUserId = toNumber(self:getVar("pushUserId", "0"), 0)
   cfg.rawHardnessDh = toNumber(self:getVar("rawHardnessDh", "25"), 25)
   cfg.targetHardnessDh = toNumber(self:getVar("targetHardnessDh", "6"), 6)
-  cfg.capacityM3DhPerKg = toNumber(self:getVar("capacityM3DhPerKg", "24.1"), 24.1)
-  cfg.manualSaltKgPerM3 = toNumber(self:getVar("saltKgPerM3", "0.9"), 0.9)
+  cfg.saltKgPerM3PerDh = toNumber(self:getVar("saltKgPerM3PerDh", "0.0474"), 0.0474)
+  cfg.manualSaltKgPerM3 = toNumber(self:getVar("saltKgPerM3", "0"), 0)
   cfg.rinseWaterLiterPerM3 = toNumber(self:getVar("rinseWaterLiterPerM3", "58"), 58)
   return cfg
 end
@@ -66,12 +66,7 @@ function QuickApp:saltKgPerM3(cfg)
     return cfg.manualSaltKgPerM3
   end
 
-  local removedHardness = math.max(0, cfg.rawHardnessDh - cfg.targetHardnessDh)
-  if removedHardness <= 0 or cfg.capacityM3DhPerKg <= 0 then
-    return 0
-  end
-
-  return removedHardness / cfg.capacityM3DhPerKg
+  return math.max(0, cfg.rawHardnessDh - cfg.targetHardnessDh) * cfg.saltKgPerM3PerDh
 end
 
 function QuickApp:loadState()
@@ -123,7 +118,8 @@ function QuickApp:updateUi(data, saltPerM3, consumedSinceFill)
 
   self:updateLabel("lblSalt", string.format("%.1f kg remaining", self.saltRemainingKg))
   self:updateLabel("lblWater", string.format("%.3f m3 total, %.3f m3 last 24h", toNumber(data.total_m3, 0), last24))
-  self:updateLabel("lblModel", string.format("%.3f kg/m3 salt, %.0f L/m3 rinse, %.1f kg used since fill", saltPerM3, cfg.rinseWaterLiterPerM3, consumedSinceFill))
+  self:updateLabel("lblModel", string.format("%.1f -> %.1f dH, %.3f kg/m3 salt, %.0f L/m3 rinse", cfg.rawHardnessDh, cfg.targetHardnessDh, saltPerM3, cfg.rinseWaterLiterPerM3))
+  self:updateLabel("lblUsed", string.format("%.1f kg used since fill", consumedSinceFill))
   self:updateLabel("lblEstimate", string.format("Warning %.1f kg, alarm %.1f kg, %s left", cfg.warningThresholdKg, cfg.alarmThresholdKg, daysLeftText))
 end
 
@@ -247,6 +243,20 @@ function QuickApp:buttonRefresh()
   self:poll()
 end
 
+function QuickApp:onSliderRawHardnessChanged(event)
+  local value = toNumber(event.values and event.values[1], self:config().rawHardnessDh)
+  self:setVar("rawHardnessDh", value)
+  self:updateView("sliderRawHardness", "value", tostring(value))
+  self:poll()
+end
+
+function QuickApp:onSliderTargetHardnessChanged(event)
+  local value = toNumber(event.values and event.values[1], self:config().targetHardnessDh)
+  self:setVar("targetHardnessDh", value)
+  self:updateView("sliderTargetHardness", "value", tostring(value))
+  self:poll()
+end
+
 function QuickApp:scheduleNextPoll()
   local cfg = self:config()
   fibaro.setTimeout(cfg.pollSeconds * 1000, function()
@@ -267,6 +277,8 @@ function QuickApp:onInit()
   end
 
   self:updateLabel("lblTitle", "BWT AQA Life Salt Monitor " .. VERSION)
+  self:updateView("sliderRawHardness", "value", tostring(self:config().rawHardnessDh))
+  self:updateView("sliderTargetHardness", "value", tostring(self:config().targetHardnessDh))
   self:poll()
   self:scheduleNextPoll()
 end

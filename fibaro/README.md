@@ -29,25 +29,27 @@ The QuickApp uses a conservative calibrated default for Glostrup/BWT AQA Life:
 
 - Raw water hardness: approximately `25 dH`
 - Target output hardness: `6 dH`
-- Active salt model: `0.9 kg/m3`
+- Active salt model: approximately `0.9 kg/m3` at `25 -> 6 dH`
+- Salt model factor: `0.0474 kg/m3 per removed dH`
 - Rinse water estimate: `58 L/m3`
 
-The manual/model fallback is:
+The model is:
 
 ```text
-saltKgPerM3 = (rawHardnessDh - targetHardnessDh) / capacityM3DhPerKg
+saltKgPerM3 = (rawHardnessDh - targetHardnessDh) * saltKgPerM3PerDh
 ```
 
 Default values:
 
 - `rawHardnessDh = 25`
 - `targetHardnessDh = 6`
-- `capacityM3DhPerKg = 24.1`
-- `saltKgPerM3 = 0.9`
+- `saltKgPerM3PerDh = 0.0474`
+- `saltKgPerM3 = 0`
 - `rinseWaterLiterPerM3 = 58`
 
-Because `saltKgPerM3` is set to `0.9`, the calibrated value is used directly.
-Set `saltKgPerM3` to `0` to use the fallback hardness formula instead.
+The QuickApp UI has sliders for raw hardness and target hardness. If you want
+to bypass the hardness model entirely, set `saltKgPerM3` to a value greater than
+zero.
 
 ## QuickApp Variables
 
@@ -61,7 +63,7 @@ Set `saltKgPerM3` to `0` to use the fallback hardness formula instead.
 - `warningThresholdKg`: Warning threshold, default `10`.
 - `rawHardnessDh`: Incoming water hardness.
 - `targetHardnessDh`: Softened/mixed output hardness.
-- `capacityM3DhPerKg`: Capacity model.
+- `saltKgPerM3PerDh`: Calibrated hardness model factor.
 - `saltKgPerM3`: Optional manual override.
 - `rinseWaterLiterPerM3`: Informational rinse water estimate.
 - `pushEnabled`: `true` to send HC3 push alert.
