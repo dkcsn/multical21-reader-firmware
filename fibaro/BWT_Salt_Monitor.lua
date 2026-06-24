@@ -1,7 +1,7 @@
 -- BWT AQA Life Salt Monitor for Fibaro HC3
 -- Reads Multical21 Reader /data.json and estimates remaining softener salt.
 
-local VERSION = "0.1.0"
+local VERSION = "0.1.1"
 
 local function toNumber(value, fallback)
   local n = tonumber(value)
@@ -53,10 +53,11 @@ function QuickApp:config()
   cfg.warningThresholdKg = math.max(cfg.alarmThresholdKg, toNumber(self:getVar("warningThresholdKg", "10"), 10))
   cfg.pushEnabled = toBool(self:getVar("pushEnabled", "false"), false)
   cfg.pushUserId = toNumber(self:getVar("pushUserId", "0"), 0)
-  cfg.rawHardnessDh = toNumber(self:getVar("rawHardnessDh", "21"), 21)
+  cfg.rawHardnessDh = toNumber(self:getVar("rawHardnessDh", "25"), 25)
   cfg.targetHardnessDh = toNumber(self:getVar("targetHardnessDh", "6"), 6)
   cfg.capacityM3DhPerKg = toNumber(self:getVar("capacityM3DhPerKg", "24.1"), 24.1)
-  cfg.manualSaltKgPerM3 = toNumber(self:getVar("saltKgPerM3", "0"), 0)
+  cfg.manualSaltKgPerM3 = toNumber(self:getVar("saltKgPerM3", "0.9"), 0.9)
+  cfg.rinseWaterLiterPerM3 = toNumber(self:getVar("rinseWaterLiterPerM3", "58"), 58)
   return cfg
 end
 
@@ -122,7 +123,7 @@ function QuickApp:updateUi(data, saltPerM3, consumedSinceFill)
 
   self:updateLabel("lblSalt", string.format("%.1f kg remaining", self.saltRemainingKg))
   self:updateLabel("lblWater", string.format("%.3f m3 total, %.3f m3 last 24h", toNumber(data.total_m3, 0), last24))
-  self:updateLabel("lblModel", string.format("%.3f kg/m3, %.1f kg used since fill", saltPerM3, consumedSinceFill))
+  self:updateLabel("lblModel", string.format("%.3f kg/m3 salt, %.0f L/m3 rinse, %.1f kg used since fill", saltPerM3, cfg.rinseWaterLiterPerM3, consumedSinceFill))
   self:updateLabel("lblEstimate", string.format("Warning %.1f kg, alarm %.1f kg, %s left", cfg.warningThresholdKg, cfg.alarmThresholdKg, daysLeftText))
 end
 

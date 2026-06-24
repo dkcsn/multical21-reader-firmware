@@ -25,7 +25,14 @@ From the BWT AQA Life manual:
 - Capacity per kg regenerant: `4.3 mol`
 - BWT recommends approximately `6 dH` output hardness
 
-The QuickApp defaults to a hardness-based model:
+The QuickApp uses a conservative calibrated default for Glostrup/BWT AQA Life:
+
+- Raw water hardness: approximately `25 dH`
+- Target output hardness: `6 dH`
+- Active salt model: `0.9 kg/m3`
+- Rinse water estimate: `58 L/m3`
+
+The manual/model fallback is:
 
 ```text
 saltKgPerM3 = (rawHardnessDh - targetHardnessDh) / capacityM3DhPerKg
@@ -33,12 +40,14 @@ saltKgPerM3 = (rawHardnessDh - targetHardnessDh) / capacityM3DhPerKg
 
 Default values:
 
-- `rawHardnessDh = 21`
+- `rawHardnessDh = 25`
 - `targetHardnessDh = 6`
 - `capacityM3DhPerKg = 24.1`
+- `saltKgPerM3 = 0.9`
+- `rinseWaterLiterPerM3 = 58`
 
-You can override the model directly by setting `saltKgPerM3` to a value greater
-than zero.
+Because `saltKgPerM3` is set to `0.9`, the calibrated value is used directly.
+Set `saltKgPerM3` to `0` to use the fallback hardness formula instead.
 
 ## QuickApp Variables
 
@@ -54,6 +63,7 @@ than zero.
 - `targetHardnessDh`: Softened/mixed output hardness.
 - `capacityM3DhPerKg`: Capacity model.
 - `saltKgPerM3`: Optional manual override.
+- `rinseWaterLiterPerM3`: Informational rinse water estimate.
 - `pushEnabled`: `true` to send HC3 push alert.
 - `pushUserId`: HC3 user ID for push alert.
 
@@ -69,8 +79,6 @@ Best calibration flow:
 
 ## Questions To Calibrate
 
-- What is your raw water hardness in `dH` from the waterworks?
-- What output hardness is the BWT set to, probably around `6 dH`?
 - Do you normally pour full `25 kg` bags, or smaller amounts?
 - At what remaining amount should Fibaro warn you, for example `5 kg`?
 - Should it send push notifications, and to which HC3 user ID?
