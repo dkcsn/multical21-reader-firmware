@@ -215,6 +215,7 @@ void WaterMeter::checkRadioHealth(WaterData& waterData)
   uint8_t rxBytes = readReg(CC1101_RXBYTES, CC1101_STATUS_REGISTER);
   uint8_t rssi = readReg(CC1101_RSSI, CC1101_STATUS_REGISTER);
   uint8_t version = readReg(CC1101_VERSION, CC1101_STATUS_REGISTER);
+  int16_t rawRssiDbm = rssiToDbm(rssi);
   waterData.radioVersion = version;
   if (!cc1101VersionLooksValid(version)) {
     waterData.radioPresent = false;
@@ -227,11 +228,9 @@ void WaterMeter::checkRadioHealth(WaterData& waterData)
   waterData.radioPresent = true;
   waterData.radioStarted = true;
   setRadioStatus(waterData, "CC1101 receiver running");
-  waterData.radioRssiDbm = rssiToDbm(rssi);
-  waterData.radioRssiValid = true;
 
   Debug.printf("CC1101 health: MARC 0x%02X, RX bytes %u, RSSI %d dBm\n\r",
-               marcState, rxBytes & 0x7F, waterData.radioRssiDbm);
+               marcState, rxBytes & 0x7F, rawRssiDbm);
 
   if ((rxBytes & 0x80) != 0 || marcState == MARCSTATE_RXFIFO_OVERFLOW) {
     Debug.println("CC1101 RX FIFO overflow");
@@ -409,11 +408,10 @@ void WaterMeter::receive(WMBusFrame * frame, WaterData& waterData)
 {
   uint8_t rxBytesBefore = readReg(CC1101_RXBYTES, CC1101_STATUS_REGISTER);
   uint8_t rssi = readReg(CC1101_RSSI, CC1101_STATUS_REGISTER);
+  int16_t frameRssiDbm = rssiToDbm(rssi);
   waterData.radioPresent = true;
   waterData.radioStarted = true;
   setRadioStatus(waterData, "CC1101 receiving");
-  waterData.radioRssiDbm = rssiToDbm(rssi);
-  waterData.radioRssiValid = true;
   const bool fifoOverflow = (rxBytesBefore & 0x80) != 0;
   uint8_t fifoBytes = rxBytesBefore & 0x7F;
   if (fifoBytes > 64) {
@@ -466,6 +464,10 @@ void WaterMeter::receive(WMBusFrame * frame, WaterData& waterData)
   memcpy(frame->payload, raw + syncOffset + 3, payloadLength);
   debugHexPrefix("WMBus payload prefix:", frame->payload, payloadLength, 24);
   frame->decode(waterData);
+  if (frame->isValid) {
+    waterData.radioRssiDbm = frameRssiDbm;
+    waterData.radioRssiValid = true;
+  }
 
   // flush RX fifo and restart receiver
   startReceiver();
