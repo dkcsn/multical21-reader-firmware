@@ -49,8 +49,8 @@ small D1 mini Lite target with 1 MB flash. Use the matching firmware binary for
 your board.
 
 ## Screenshots
+<img width="1242" height="1207" alt="image" src="https://github.com/user-attachments/assets/c2f1ce47-d7eb-49d1-b4c0-c27d660cb772" />
 
-<img width="1242" height="985" alt="Multical 21 Reader dashboard" src="https://github.com/user-attachments/assets/7eeaec00-6541-421b-8f9d-141c903ef639" />
 
 <img width="1242" height="1207" alt="Multical 21 Reader setup and graphs" src="https://github.com/user-attachments/assets/82798402-5b35-46f1-8b8c-3aa0b3f0a1fe" />
 
