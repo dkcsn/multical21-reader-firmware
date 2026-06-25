@@ -68,13 +68,13 @@ your board.
 Meter serial example:
 
 ```text
-77513579
+12345678
 ```
 
 AES key example format:
 
 ```text
-CB42BF02F313BCD5E24CECB586977267
+00112233445566778899AABBCCDDEEFF
 ```
 
 Do not include `0x`, commas, or spaces in the web UI fields.
