@@ -15,6 +15,7 @@ public:
   uint32_t getMinuteMilliM3(uint8_t age) const;
   uint32_t getDayMilliM3(uint8_t age) const;
   uint32_t getWeekMilliM3(uint8_t age) const;
+  uint32_t getCurrentWeekMilliM3() const;
   uint32_t getMonthMilliM3(uint8_t age) const;
   uint32_t getYearMilliM3(uint8_t age) const;
   uint32_t getTodayMilliM3() const;

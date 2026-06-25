@@ -37,6 +37,14 @@ static int32_t yearKeyFromLocal(time_t localNow) {
   return tm->tm_year + 1900;
 }
 
+static int32_t mondayWeekKeyFromDayKey(int32_t dayKey) {
+  return (dayKey + 3) / 7;
+}
+
+static uint8_t mondayWeekdayFromDayKey(int32_t dayKey) {
+  return (uint8_t) ((dayKey + 3) % 7);
+}
+
 void WaterHistory::begin() {
   setDefaults();
   if (!LittleFS.begin()) {
@@ -116,6 +124,19 @@ uint32_t WaterHistory::getWeekMilliM3(uint8_t age) const {
     return 0;
   }
   return state.weekly[age];
+}
+
+uint32_t WaterHistory::getCurrentWeekMilliM3() const {
+  if (state.currentDayKey < 0) {
+    return state.weekly[0];
+  }
+
+  uint8_t daysInCurrentWeek = mondayWeekdayFromDayKey(state.currentDayKey) + 1;
+  uint32_t total = 0;
+  for (uint8_t i = 0; i < daysInCurrentWeek && i < DAY_BUCKETS; i++) {
+    total += state.daily[i];
+  }
+  return total;
 }
 
 uint32_t WaterHistory::getMonthMilliM3(uint8_t age) const {
@@ -243,7 +264,7 @@ bool WaterHistory::load() {
     state.yearly[0] = state.monthly[0];
     state.currentHourKey = legacy.currentHourKey;
     state.currentDayKey = legacy.currentDayKey;
-    state.currentWeekKey = legacy.currentDayKey >= 0 ? legacy.currentDayKey / 7 : -1;
+    state.currentWeekKey = legacy.currentDayKey >= 0 ? mondayWeekKeyFromDayKey(legacy.currentDayKey) : -1;
     state.currentMonthKey = -1;
     state.currentYearKey = -1;
     state.lastTotalMilliM3 = legacy.lastTotalMilliM3;
@@ -297,7 +318,7 @@ void WaterHistory::rotateBuckets(time_t localNow) {
 
   int32_t hourKey = localNow / 3600;
   int32_t dayKey = localNow / 86400;
-  int32_t weekKey = dayKey / 7;
+  int32_t weekKey = mondayWeekKeyFromDayKey(dayKey);
   int32_t monthKey = monthKeyFromLocal(localNow);
   int32_t yearKey = yearKeyFromLocal(localNow);
 

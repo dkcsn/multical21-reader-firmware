@@ -533,7 +533,7 @@ void AppWebServer::handleRoot() {
   body += F("</span> m3</strong><small>Today water use</small></article>");
 
   body += F("<article class=\"card accentWeekly\"><div class=\"cardTop\"><span>Weekly Usage</span><b class=\"chip ok\">Week</b></div><strong><span id=\"weeklyUsage\">");
-  body += formatM3(history.getWeekMilliM3(0));
+  body += formatM3(history.getCurrentWeekMilliM3());
   body += F("</span> m3</strong><small>This week water use</small></article>");
 
   body += F("<article class=\"card accentMeter\"><div class=\"cardTop\"><span>Meter Details</span><b class=\"chip ");
@@ -729,7 +729,7 @@ void AppWebServer::handleDataJson() {
   json += F(",\"current_hour_m3\":");
   json += formatM3(history.getHourMilliM3(0));
   json += F(",\"current_week_m3\":");
-  json += formatM3(history.getWeekMilliM3(0));
+  json += formatM3(history.getCurrentWeekMilliM3());
   json += F(",\"last_24h_m3\":");
   json += formatM3(history.getLast24HoursMilliM3());
   uint32_t last60Minutes = 0;
