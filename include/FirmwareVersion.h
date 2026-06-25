@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 #ifndef FW_VERSION
-  #define FW_VERSION "1.1.1"
+  #define FW_VERSION "1.1.2"
 #endif
 
 #ifndef FW_GIT_SHA
