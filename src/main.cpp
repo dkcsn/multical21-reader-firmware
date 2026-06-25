@@ -381,14 +381,6 @@ static void startRadioIfConfigured() {
     return;
   }
 
-  if (!appConfig.hasMeter()) {
-    strncpy(waterData.radioStatus, "Meter serial and AES key are not configured", sizeof(waterData.radioStatus) - 1);
-    waterData.radioStatus[sizeof(waterData.radioStatus) - 1] = '\0';
-    waterData.radioPresent = false;
-    waterData.radioStarted = false;
-    return;
-  }
-
   if (lastRadioStartAttempt != 0 && millis() - lastRadioStartAttempt < 30000) {
     return;
   }
@@ -453,7 +445,7 @@ void loop() {
   waterHistory.loop();
   startRadioIfConfigured();
 
-  if (radioStarted) {
+  if (radioStarted && appConfig.hasMeter()) {
     if (waterMeter.readFrame(waterData, appConfig.data())) {
       waterHistory.update(waterData, localNow());
       publishWaterData();
@@ -462,6 +454,8 @@ void loop() {
     if (!waterData.radioStarted) {
       radioStarted = false;
     }
+  } else if (radioStarted && !waterData.radioStarted) {
+    radioStarted = false;
   }
 
   if (!setupApMode && appConfig.hasMqtt()) {

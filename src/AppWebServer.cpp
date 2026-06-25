@@ -105,14 +105,18 @@ static String radioRssiClass(const WaterData& data) {
 }
 
 static String radioStatusText(const WaterData& data, bool meterConfigured) {
+  String status;
   if (!meterConfigured) {
-    return F("Meter serial and AES key are not configured.");
+    status += F("Meter serial and AES key are not configured.");
   }
   if (!data.radioPresent || !data.radioStarted) {
-    if (strlen(data.radioStatus) > 0) {
-      return String(data.radioStatus);
+    if (status.length() > 0) {
+      status += '\n';
     }
-    return F("CC1101 radio module not detected. Check wiring, SPI pins and 3.3V power.");
+    status += strlen(data.radioStatus) > 0 ? String(data.radioStatus) : String("CC1101 not detected.");
+  }
+  if (status.length() > 0) {
+    return status;
   }
   if (!data.valid) {
     return F("CC1101 is running. Waiting for the first valid wireless M-Bus frame.");
@@ -1036,7 +1040,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("button,.buttonLink{font:inherit;padding:10px 14px;border:0;border-radius:6px;background:#0b7285;color:white;font-weight:700;cursor:pointer;align-self:end;text-decoration:none;display:inline-block}");
   html += F(".danger{background:#b42318}");
   html += F(".uploadForm{margin-top:14px}.hint{color:#52606d;font-size:13px;margin:12px 0 0}");
-  html += F(".hero{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:18px;align-items:center;background:#12344d;color:white;border-color:#12344d}.hero h2{font-size:28px;margin:0 0 8px}.eyebrow{margin:0 0 6px;color:#9fb3c8;font-size:12px;font-weight:800;text-transform:uppercase}.heroText{margin:0;color:#d9e2ec}.heroAction{margin:10px 0 0}.heroAction:empty{display:none}.heroAction a{display:inline-flex;color:white;background:#0b7285;text-decoration:none;border-radius:5px;padding:7px 10px;font-weight:800;font-size:12px}.heroMeter{border:1px solid #486581;border-radius:8px;padding:14px;background:#0f2f46}.heroMeter span,.heroMeter small{display:block;color:#bcccdc}.heroMeter strong{display:block;font-size:34px;line-height:1.1;margin:4px 0}");
+  html += F(".hero{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:18px;align-items:center;background:#12344d;color:white;border-color:#12344d}.hero h2{font-size:28px;margin:0 0 8px}.eyebrow{margin:0 0 6px;color:#9fb3c8;font-size:12px;font-weight:800;text-transform:uppercase}.heroText{margin:0;color:#d9e2ec;white-space:pre-line}.heroAction{margin:10px 0 0}.heroAction:empty{display:none}.heroAction a{display:inline-flex;color:white;background:#0b7285;text-decoration:none;border-radius:5px;padding:7px 10px;font-weight:800;font-size:12px}.heroMeter{border:1px solid #486581;border-radius:8px;padding:14px;background:#0f2f46}.heroMeter span,.heroMeter small{display:block;color:#bcccdc}.heroMeter strong{display:block;font-size:34px;line-height:1.1;margin:4px 0}");
   html += F(".cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;background:transparent;border:0;padding:0}.card{background:white;border:1px solid #d9e2ec;border-left:5px solid #0b7285;border-radius:8px;padding:14px;min-height:108px;display:grid;gap:10px}.cardTop{display:flex;justify-content:space-between;gap:8px;align-items:center}.cardTop span{font-size:12px;color:#52606d;font-weight:800;text-transform:uppercase}.card strong{font-size:22px;line-height:1.15;overflow-wrap:anywhere}.card small{color:#52606d;overflow-wrap:anywhere}.card a{font-size:22px;font-weight:800}.chip{border-radius:999px;padding:4px 8px;font-size:11px;color:white;white-space:nowrap}.ok{background:#147d64}.warn{background:#b7791f}.off{background:#627d98}.accentRx{border-left-color:#147d64}.accentWater{border-left-color:#0b7285}.accentUsage{border-left-color:#2f9e44}.accentDaily{border-left-color:#1864ab}.accentWeekly{border-left-color:#6741d9}.accentWifi{border-left-color:#1864ab}.accentMqtt{border-left-color:#6741d9}.accentTime{border-left-color:#d9480f}.accentMeter{border-left-color:#c2410c}.accentVersion{border-left-color:#087f5b}");
   html += F(".sectionHead{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin:0 0 10px}.sectionHead h2{margin:0}.sectionHead span{color:#52606d;font-size:12px;font-weight:700;text-transform:uppercase}.graphPanel{padding-bottom:12px}.graphSummary{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px}.graphSummary span{background:#f0f4f8;border:1px solid #d9e2ec;border-radius:6px;padding:7px 9px;color:#52606d;font-size:12px}.graphSummary strong{color:#102a43}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}.tab{border:1px solid #bcccdc;background:#f0f4f8;color:#102a43;text-decoration:none;border-radius:6px;padding:8px 10px;font-weight:800;font-size:13px}.tab.active{background:#0b7285;border-color:#0b7285;color:white}");
   html += F(".setupPanel{border-left:5px solid #0b7285}.setupForm{display:block}.formSection{border-top:1px solid #d9e2ec;padding-top:14px;margin-top:14px}.formSection:first-of-type{border-top:0;padding-top:0}.formSection h3{font-size:15px;margin:0 0 10px;color:#102a43}.formGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.actionRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.actionRow form{display:block}.actionRow button{min-width:170px}.statusLine{border:1px solid #d9e2ec;border-radius:6px;padding:10px;background:#f8fafc;display:grid;gap:4px;color:#52606d}.statusLine strong{color:#102a43}.statusLine small{font-size:12px;color:#627d98}.deviceActions{padding-bottom:0}.onboardingPanel{border-color:#0b7285;background:#f8fcfd}.onboardingPanel .sectionHead h2{font-size:24px}");
@@ -1047,7 +1051,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("@media(max-width:1200px){.cards{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}}@media(max-width:980px){header{grid-template-columns:1fr}.statusGroup,.navLinks{justify-content:flex-start;flex-wrap:wrap}.statusGroup{overflow:visible}.navLinks{border-left:0;padding-left:0;border-top:1px solid #486581;padding-top:8px}}@media(max-width:640px){main{padding:12px}.hero{grid-template-columns:1fr}.hero h2{font-size:24px}dl{grid-template-columns:1fr}.heroMeter strong{font-size:30px}nav a span{display:none}.statusPill{min-width:62px}}");
   html += F("</style></head><body><header><h1>Multical 21 Reader</h1><nav class=\"topRight\"><div class=\"statusGroup\">");
   html += F("<span id=\"topFramePill\" class=\"statusPill ");
-  html += !waterData.radioPresent && config.hasMeter() ? F("statusAlarm") : (radioLive ? F("statusOk") : (waterData.valid ? F("statusWarn") : F("statusOff")));
+  html += !waterData.radioPresent ? F("statusAlarm") : (radioLive ? F("statusOk") : (waterData.valid ? F("statusWarn") : F("statusOff")));
   html += F("\" title=\"");
   html += htmlEscape(radioStatus);
   html += F("\"><span class=\"statusDot\"></span><span id=\"topFrameText\" class=\"statusText\">");
