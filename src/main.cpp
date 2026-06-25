@@ -350,7 +350,7 @@ static void publishWaterData() {
   payload += ",\"month_start_m3\":";
   payload += String(waterData.monthStartM3(), 3);
   payload += ",\"month_usage_m3\":";
-  payload += String(waterData.monthUsageM3(), 3);
+  payload += String(waterHistory.getMonthMilliM3(0) / 1000.0f, 3);
   payload += ",\"water_temperature_c\":";
   payload += waterData.waterTemperatureC;
   payload += ",\"ambient_temperature_c\":";

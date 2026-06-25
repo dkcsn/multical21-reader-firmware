@@ -521,7 +521,7 @@ void AppWebServer::handleRoot() {
   body += F("</b></div><strong><span id=\"waterTotal\">");
   body += waterData.valid ? String(waterData.totalM3(), 3) : String("--");
   body += F("</span> m3</strong><small>Month <span id=\"monthUsage\">");
-  body += waterData.valid ? String(waterData.monthUsageM3(), 3) + String(" m3") : String("-");
+  body += waterData.valid ? formatM3(history.getMonthMilliM3(0)) + String(" m3") : String("-");
   body += F("</span></small></article>");
 
   body += F("<article class=\"card accentUsage\"><div class=\"cardTop\"><span>Hourly Usage</span><b class=\"chip ok\">History</b></div><strong><span id=\"hourlyUsage\">");
@@ -723,7 +723,7 @@ void AppWebServer::handleDataJson() {
   json += F(",\"month_start_m3\":");
   json += String(waterData.monthStartM3(), 3);
   json += F(",\"month_usage_m3\":");
-  json += String(waterData.monthUsageM3(), 3);
+  json += formatM3(history.getMonthMilliM3(0));
   json += F(",\"today_m3\":");
   json += formatM3(history.getTodayMilliM3());
   json += F(",\"current_hour_m3\":");
