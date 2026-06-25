@@ -1,88 +1,123 @@
-# esp-multical21
+# Multical 21 Reader Firmware
 
-## New project direction
+Modern ESP8266/ESP32 firmware for Kamstrup Multical 21 water meters with an
+AMS Reader inspired web interface, WiFi onboarding, local water usage graphs,
+Home Assistant MQTT, Fibaro/local JSON API, browser OTA updates, and Telnet
+debugging.
 
-This repository is being shaped into an AMS Reader inspired firmware for
-Kamstrup Multical 21 water meters: WiFi onboarding, browser configuration,
-runtime entry of meter serial and AES key, water usage graphs, MQTT/Home
-Assistant integration, and OTA updates.
+This project is a product-focused continuation of the ESP Multical 21 reader
+idea. It keeps the useful wireless M-Bus / CC1101 / AES-CTR decoding foundation
+and adds the practical firmware features needed to run a Multical 21 reader as
+a small standalone appliance on a home network.
 
-See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the current architecture and
-milestone plan.
-<img width="1242" height="985" alt="image" src="https://github.com/user-attachments/assets/7eeaec00-6541-421b-8f9d-141c903ef639" />
-<img width="1242" height="1207" alt="image" src="https://github.com/user-attachments/assets/82798402-5b35-46f1-8b8c-3aa0b3f0a1fe" />
+Keywords: Kamstrup Multical 21, Multical21, wireless M-Bus, wM-Bus, CC1101,
+ESP8266, D1 mini, D1 mini Lite, ESP32, water meter, Home Assistant, MQTT,
+Fibaro Home Center, OTA firmware, captive portal, water usage graphs.
 
-Current firmware baseline:
+## Highlights
 
-- Builds for ESP32 and ESP8266 with PlatformIO.
-- Starts a setup access point named `Multical21-Setup` when WiFi is not
-  configured or cannot connect.
-- Provides captive portal redirects for common Android, iOS, Windows, and
-  browser connectivity checks.
-- Supports WiFi scan and WiFi credential test from the setup UI.
-- Serves AMS-style pages on port 80: dashboard `/`, setup `/setup`, graphs
-  `/graphs`, firmware upload `/firmware`.
-- Shows icon navigation and an RX indicator for Multical frame freshness in the
-  top bar.
-- Stores configuration in EEPROM instead of requiring a local `credentials.h`.
-- Supports NTP time sync for calendar-aligned graph buckets.
-- Retries NTP sync after WiFi connect, uses fallback NTP servers, and reports
-  real system time sync status in the UI and `/data.json`.
-- Shows hourly and daily water graphs with total and peak summaries.
-- Publishes decoded water meter state to MQTT as JSON when MQTT is enabled.
-- Supports MQTT retain and secure MQTT/TLS mode. TLS currently uses an insecure
-  client mode without CA validation, intended for local broker setups.
-- Supports Home Assistant MQTT discovery for water totals, usage windows,
-  temperatures, last frame age, and Multical alarm flags.
-- Supports browser firmware upload from `/firmware`.
-- Supports optional Telnet debug on port 23, enabled from the setup UI.
-- Shows firmware version, build date, board, and git SHA in the dashboard and
-  `/version.json`.
-- Tracks in-memory hourly and daily consumption history from the cumulative
-  Multical 21 counter.
-- Persists graph history to LittleFS so charts can survive reboot.
-- Exposes `/configuration.json`, `/data.json`, `/dayplot.json`, and
-  `/monthplot.json` for UI/API use.
-- Uses ESP32 mbedTLS AES-CTR and ESP8266 Crypto AES-CTR for Multical 21 frame
-  decryption.
+- AMS-style dashboard with status top bar, live RX/radio/NTP/MQTT indicators,
+  water total, hourly, daily, weekly usage, meter details, and a 60 minute live
+  usage graph.
+- WiFi onboarding with setup AP `Multical21-Setup`, captive portal redirects,
+  WiFi scan, and WiFi connection testing from the browser.
+- Browser setup UI for device name, WiFi, NTP, MQTT, Home Assistant discovery,
+  Telnet debug, meter serial, and AES key.
+- Runtime meter setup: no local `credentials.h` is required for meter serial or
+  encryption key.
+- Persistent history in LittleFS so hourly, daily, weekly, monthly, and yearly
+  graph data can survive reboot.
+- NTP-backed calendar buckets so graph days, weeks, months, and years follow
+  real dates.
+- MQTT JSON publishing and optional Home Assistant MQTT discovery.
+- Local JSON endpoints for Fibaro, scripts, dashboards, and other home
+  automation systems.
+- Browser OTA firmware upload from `/firmware`.
+- Optional Telnet debug on port 23 with mirrored serial diagnostics.
+- GitHub Actions release builds for ESP32, ESP8266, and ESP8266 D1 mini Lite.
 
-First boot:
+## Supported Hardware
 
-1. Flash the firmware.
+- Kamstrup Multical 21 water meter with wireless M-Bus.
+- CC1101 868 MHz radio module connected over SPI.
+- ESP8266 D1 mini.
+- ESP8266 D1 mini Lite.
+- ESP32 boards supported by the PlatformIO `esp32` environment.
+
+The default PlatformIO environment is `esp8266_lite`, because that is a common
+small D1 mini Lite target with 1 MB flash. Use the matching firmware binary for
+your board.
+
+## Screenshots
+
+<img width="1242" height="985" alt="Multical 21 Reader dashboard" src="https://github.com/user-attachments/assets/7eeaec00-6541-421b-8f9d-141c903ef639" />
+
+<img width="1242" height="1207" alt="Multical 21 Reader setup and graphs" src="https://github.com/user-attachments/assets/82798402-5b35-46f1-8b8c-3aa0b3f0a1fe" />
+
+## First Boot
+
+1. Flash the matching firmware binary for your board.
 2. Join the WiFi network `Multical21-Setup`.
 3. Open the captive portal prompt, or browse to `http://192.168.4.1/`.
-4. Scan/test WiFi, then enter MQTT, meter serial as 8 hex characters, and AES key as 32 hex
-   characters.
-5. Save and reboot.
+4. Scan/test WiFi.
+5. Enter meter serial as 8 hex characters.
+6. Enter AES key as 32 hex characters.
+7. Configure MQTT/Home Assistant if needed.
+8. Save and reboot.
 
-Force setup/captive portal:
+Meter serial example:
 
-- Open `http://<device-ip>/setup` and press `Reset setup`; the device clears
-  runtime configuration and reboots into `Multical21-Setup`.
-- Or erase flash before upload from PlatformIO if you want a fully clean first
-  boot.
+```text
+77513579
+```
 
-Firmware update:
+AES key example format:
 
-1. Build the matching PlatformIO target.
-2. Open `http://<device-ip>/firmware`.
-3. Upload the matching `.pio/build/<environment>/firmware.bin`.
-4. The device validates the image and restarts when the upload succeeds.
+```text
+CB42BF02F313BCD5E24CECB586977267
+```
 
-GitHub release binaries:
+Do not include `0x`, commas, or spaces in the web UI fields.
 
-1. Create and push a version tag, for example `git tag v0.1.0`.
-2. Push the tag with `git push origin v0.1.0`.
-3. GitHub Actions builds ESP32 and ESP8266 `.bin` files and attaches them to
-   the release with SHA256 checksums.
+## Web UI
 
-Telnet debug:
+- `/` - dashboard with current water state and recent usage.
+- `/setup` - WiFi, NTP, MQTT, Home Assistant, Telnet, meter serial, AES key.
+- `/graphs` - hourly, daily, weekly, monthly, and yearly graphs.
+- `/firmware` - browser OTA firmware upload.
+- `/data.json` - local JSON state API.
+- `/dayplot.json` - 24 hour plot data.
+- `/monthplot.json` - 31 day plot data.
+- `/version.json` - firmware version, build date, board, and git SHA.
 
-1. Enable `Telnet debug` in the setup UI and reboot.
-2. Connect with `telnet <device-ip> 23` or `nc <device-ip> 23`.
-3. Serial debug output is mirrored to the Telnet session.
+If mDNS is available on your network, the device can also be reached by the
+configured device name, for example:
 
-Fibaro Home Center can poll:
+```text
+http://multical21.local
+```
+
+## Home Assistant And MQTT
+
+MQTT can be enabled from the setup page. The firmware publishes decoded water
+meter state as JSON and can publish Home Assistant discovery entities for:
+
+- total water counter
+- current hour usage
+- daily usage
+- weekly/monthly/yearly history windows
+- water temperature
+- room/ambient temperature
+- last frame age
+- Multical alarm flags: dry, reverse flow, leak, burst
+
+Secure MQTT/TLS can be enabled, but certificate management is intentionally not
+part of this firmware. TLS mode is intended for trusted local network broker
+setups.
+
+## Fibaro And Local API
+
+Fibaro Home Center or any other controller can poll:
 
 - `http://<device-ip>/data.json` for current state and sync-safe total counter.
 - `http://<device-ip>/dayplot.json` for the 24 hour graph.
@@ -92,19 +127,99 @@ Use `total_m3` as the source of truth. If Fibaro misses polls, it can recover by
 calculating the difference between the latest `total_m3` and the last value it
 stored. Use `last_frame_age_s` to detect stale radio data.
 
-Added MQTT data upload to the project from weetmuts original the values was only send to the serial terminal.
-And how the data is written to the serial terminal.
+The repository also contains a Fibaro Quick App for estimating BWT AQA Life salt
+usage from the Multical water consumption API:
 
-Recieve MQTT Topics via
-"/watermeter/mydatajson" and 
-"/watermeter/mydata"
+- [`fibaro/BWT_Salt_Monitor.lua`](fibaro/BWT_Salt_Monitor.lua)
+- [`fibaro/README.md`](fibaro/README.md)
 
-ESP8266 decrypts wireless MBus frames from a Multical21 water meter
+## Firmware Update
 
-A CC1101 868 MHz modul is connected via SPI to the ESP8266 an configured to receive Wireless MBus frames.
-The Multical21 is sending every 16 seconds wireless MBus frames (Mode C1, frame type B). The encrypted
-frames are received from the ESP8266 an it decrypts them with AES-128-CTR. The meter information 
-(total counter, target counter, medium temperature, ambient temperature, alalm flags (BURST, LEAK, DRY,
-REVERSE) are sent via MQTT to a smarthomeNG/smartVISU service (running on a raspberry).
+1. Build the matching PlatformIO target, or download a release binary.
+2. Open `http://<device-ip>/firmware`.
+3. Upload the matching `.bin` file.
+4. The device validates the image and restarts when the upload succeeds.
 
-Thanks to [weetmuts](https://github.com/weetmuts) for his great job on the wmbusmeters.
+For ESP8266 D1 mini Lite, use:
+
+```text
+multical21-reader-<version>-esp8266-lite.bin
+```
+
+## GitHub Release Binaries
+
+Every pushed `v*` tag starts the release workflow. GitHub Actions builds and
+attaches:
+
+- `multical21-reader-<version>-esp32.bin`
+- `multical21-reader-<version>-esp8266.bin`
+- `multical21-reader-<version>-esp8266-lite.bin`
+- `SHA256SUMS.txt`
+
+## Build Locally
+
+Install PlatformIO and build the default ESP8266 Lite target:
+
+```sh
+pio run
+```
+
+Build all supported environments:
+
+```sh
+pio run -e esp32 -e esp8266 -e esp8266_lite
+```
+
+## Force Setup / Captive Portal
+
+- Open `http://<device-ip>/setup` and press `Reset setup`.
+- The device clears runtime configuration and reboots into `Multical21-Setup`.
+- Or erase flash before upload from PlatformIO if you want a fully clean first
+  boot.
+
+## Telnet Debug
+
+1. Enable `Telnet debug` in the setup UI and reboot.
+2. Connect with `telnet <device-ip> 23` or `nc <device-ip> 23`.
+3. Serial debug output is mirrored to the Telnet session.
+
+Telnet debug is useful for checking CC1101 packet interrupts, radio RSSI,
+wireless M-Bus frame validation, meter serial matching, and AES decrypt status.
+
+## Project Lineage
+
+This firmware builds on the original open source Multical 21 reader work and
+related wireless M-Bus decoding knowledge:
+
+- Original project inspiration: [chester4444/esp-multical21](https://github.com/chester4444/esp-multical21)
+- Additional ESP Multical 21 work: [derbmann/esp-multical21](https://github.com/derbmann/esp-multical21)
+- Wireless M-Bus tooling: [wmbusmeters/wmbusmeters](https://github.com/wmbusmeters/wmbusmeters)
+- Earlier MQTT/serial reader work by [weetmuts](https://github.com/weetmuts)
+
+This repository is maintained as the product firmware version with browser
+setup, persistent history, OTA update flow, local API, and home automation
+integrations.
+
+## Recommended GitHub Topics
+
+Add these topics to the GitHub repository so the project is easier to find:
+
+```text
+kamstrup
+multical21
+water-meter
+wireless-mbus
+wmbus
+cc1101
+esp8266
+esp32
+home-assistant
+mqtt
+fibaro
+ota
+```
+
+## License
+
+This project follows the license inherited from the original ESP Multical 21
+reader code. See [`LICENSE`](LICENSE).
