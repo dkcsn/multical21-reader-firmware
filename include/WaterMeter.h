@@ -223,6 +223,9 @@ class WaterMeter
     // log cc1101 identity and state
     void logRadioIdentity(void);
 
+    // detect cc1101 identity and update runtime status
+    bool detectRadio(WaterData& waterData);
+
     // receive a wmbus frame 
     void receive(WMBusFrame *payload, WaterData& waterData);
 
@@ -235,7 +238,7 @@ class WaterMeter
     WaterMeter(void);
 
     // startup CC1101 for receiving wmbus mode c 
-    void begin();
+    bool begin(WaterData& waterData);
 
     // must be called frequently, returns true if a valid frame was received
     bool readFrame(WaterData& waterData, const AppConfigData& config);

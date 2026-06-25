@@ -15,6 +15,7 @@
 #include "WaterMeter.h"
 #include "DebugLog.h"
 #include "hwconfig.h"
+#include <string.h>
 
 volatile boolean packetAvailable = false;
 void IRAM_ATTR GD0_ISR(void);
@@ -26,6 +27,17 @@ WaterMeter::WaterMeter()
 static int16_t rssiToDbm(uint8_t rssi)
 {
   return rssi >= 128 ? ((int16_t) rssi - 256) / 2 - 74 : rssi / 2 - 74;
+}
+
+static void setRadioStatus(WaterData& waterData, const char* status)
+{
+  strncpy(waterData.radioStatus, status, sizeof(waterData.radioStatus) - 1);
+  waterData.radioStatus[sizeof(waterData.radioStatus) - 1] = '\0';
+}
+
+static bool cc1101VersionLooksValid(uint8_t version)
+{
+  return version != 0x00 && version != 0xFF;
 }
 
 static void debugHexPrefix(const char* label, const uint8_t* data, uint8_t len, uint8_t maxLen)
@@ -66,7 +78,13 @@ inline void WaterMeter::deselectCC1101(void)
 // wait for MISO pulling down
 inline void WaterMeter::waitMiso(void)
 {
-  while(digitalRead(MISO) == HIGH);
+  const unsigned long started = micros();
+  while (digitalRead(MISO) == HIGH) {
+    if (micros() - started > 2000) {
+      return;
+    }
+    delayMicroseconds(1);
+  }
 }
 
 // write a single register of CC1101
@@ -196,6 +214,19 @@ void WaterMeter::checkRadioHealth(WaterData& waterData)
   uint8_t marcState = readReg(CC1101_MARCSTATE, CC1101_STATUS_REGISTER);
   uint8_t rxBytes = readReg(CC1101_RXBYTES, CC1101_STATUS_REGISTER);
   uint8_t rssi = readReg(CC1101_RSSI, CC1101_STATUS_REGISTER);
+  uint8_t version = readReg(CC1101_VERSION, CC1101_STATUS_REGISTER);
+  waterData.radioVersion = version;
+  if (!cc1101VersionLooksValid(version)) {
+    waterData.radioPresent = false;
+    waterData.radioStarted = false;
+    waterData.radioRssiValid = false;
+    setRadioStatus(waterData, "CC1101 not detected");
+    Debug.printf("CC1101 health failed: invalid VERSION 0x%02X\n\r", version);
+    return;
+  }
+  waterData.radioPresent = true;
+  waterData.radioStarted = true;
+  setRadioStatus(waterData, "CC1101 receiver running");
   waterData.radioRssiDbm = rssiToDbm(rssi);
   waterData.radioRssiValid = true;
 
@@ -273,6 +304,33 @@ void WaterMeter::logRadioIdentity(void)
                partnum, version, marcState, pktStatus);
 }
 
+bool WaterMeter::detectRadio(WaterData& waterData)
+{
+  uint8_t partnum = readReg(CC1101_PARTNUM, CC1101_STATUS_REGISTER);
+  uint8_t version = readReg(CC1101_VERSION, CC1101_STATUS_REGISTER);
+  uint8_t marcState = readReg(CC1101_MARCSTATE, CC1101_STATUS_REGISTER);
+  uint8_t pktStatus = readReg(CC1101_PKTSTATUS, CC1101_STATUS_REGISTER);
+
+  waterData.radioPartnum = partnum;
+  waterData.radioVersion = version;
+
+  Debug.printf("CC1101 identity: PARTNUM 0x%02X VERSION 0x%02X MARC 0x%02X PKTSTATUS 0x%02X\n\r",
+               partnum, version, marcState, pktStatus);
+
+  if (!cc1101VersionLooksValid(version)) {
+    waterData.radioPresent = false;
+    waterData.radioStarted = false;
+    waterData.radioRssiValid = false;
+    setRadioStatus(waterData, "CC1101 not detected");
+    return false;
+  }
+
+  waterData.radioPresent = true;
+  waterData.radioStarted = true;
+  setRadioStatus(waterData, "CC1101 detected");
+  return true;
+}
+
 // handle interrupt from CC1101 via GDO0
 void GD0_ISR(void) {
   // set the flag that a package is available
@@ -312,13 +370,17 @@ bool WaterMeter::readFrame(WaterData& waterData, const AppConfigData& config)
 }
 
 // Initialize CC1101 to receive WMBus MODE C1 
-void WaterMeter::begin()
+bool WaterMeter::begin(WaterData& waterData)
 {
   pinMode(SS, OUTPUT);	// SS Pin -> Output
   SPI.begin();                          // Initialize SPI interface
   pinMode(CC1101_GDO0, INPUT);          // Config GDO0 as input
 
   reset();                              // power on CC1101
+  if (!detectRadio(waterData)) {
+    Debug.println("CC1101 receiver not started: radio module not detected");
+    return false;
+  }
 
   //Serial.println("Setting CC1101 registers");
   initializeRegisters();                // init CC1101 registers
@@ -331,6 +393,9 @@ void WaterMeter::begin()
   startReceiver();
   lastHealthCheckMillis = millis();
   lastFrameReceivedMillis = millis();
+  waterData.radioStarted = true;
+  setRadioStatus(waterData, "CC1101 receiver running");
+  return true;
 }
 
 // reads a single byte from the RX fifo
@@ -344,6 +409,9 @@ void WaterMeter::receive(WMBusFrame * frame, WaterData& waterData)
 {
   uint8_t rxBytesBefore = readReg(CC1101_RXBYTES, CC1101_STATUS_REGISTER);
   uint8_t rssi = readReg(CC1101_RSSI, CC1101_STATUS_REGISTER);
+  waterData.radioPresent = true;
+  waterData.radioStarted = true;
+  setRadioStatus(waterData, "CC1101 receiving");
   waterData.radioRssiDbm = rssiToDbm(rssi);
   waterData.radioRssiValid = true;
   const bool fifoOverflow = (rxBytesBefore & 0x80) != 0;

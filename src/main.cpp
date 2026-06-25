@@ -20,6 +20,7 @@
 #include <DNSServer.h>
 #include <PubSubClient.h>
 #include <time.h>
+#include <string.h>
 
 #include "AppConfig.h"
 #include "AppWebServer.h"
@@ -51,6 +52,7 @@ DNSServer dnsServer;
 
 bool setupApMode = false;
 bool radioStarted = false;
+unsigned long lastRadioStartAttempt = 0;
 unsigned long lastMqttAttempt = 0;
 unsigned long lastMqttPublish = 0;
 unsigned long lastNtpAttempt = 0;
@@ -375,13 +377,25 @@ static void publishWaterData() {
 }
 
 static void startRadioIfConfigured() {
-  if (radioStarted || !appConfig.hasMeter()) {
+  if (radioStarted) {
     return;
   }
 
-  waterMeter.begin();
-  radioStarted = true;
-  Debug.println("CC1101 receiver started");
+  if (!appConfig.hasMeter()) {
+    strncpy(waterData.radioStatus, "Meter serial and AES key are not configured", sizeof(waterData.radioStatus) - 1);
+    waterData.radioStatus[sizeof(waterData.radioStatus) - 1] = '\0';
+    waterData.radioPresent = false;
+    waterData.radioStarted = false;
+    return;
+  }
+
+  if (lastRadioStartAttempt != 0 && millis() - lastRadioStartAttempt < 30000) {
+    return;
+  }
+  lastRadioStartAttempt = millis();
+
+  radioStarted = waterMeter.begin(waterData);
+  Debug.println(radioStarted ? "CC1101 receiver started" : "CC1101 receiver not started");
 }
 
 void setup() {
@@ -439,10 +453,15 @@ void loop() {
   waterHistory.loop();
   startRadioIfConfigured();
 
-  if (radioStarted && waterMeter.readFrame(waterData, appConfig.data())) {
-    waterHistory.update(waterData, localNow());
-    publishWaterData();
-    lastMqttPublish = millis();
+  if (radioStarted) {
+    if (waterMeter.readFrame(waterData, appConfig.data())) {
+      waterHistory.update(waterData, localNow());
+      publishWaterData();
+      lastMqttPublish = millis();
+    }
+    if (!waterData.radioStarted) {
+      radioStarted = false;
+    }
   }
 
   if (!setupApMode && appConfig.hasMqtt()) {

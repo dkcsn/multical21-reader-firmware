@@ -17,6 +17,11 @@ struct WaterData {
   int8_t ambientTemperatureC = 0;
   int16_t radioRssiDbm = 0;
   bool radioRssiValid = false;
+  bool radioPresent = false;
+  bool radioStarted = false;
+  uint8_t radioPartnum = 0;
+  uint8_t radioVersion = 0;
+  char radioStatus[64] = "Radio not started";
   WaterAlarms alarms;
   unsigned long lastFrameMillis = 0;
   bool valid = false;
