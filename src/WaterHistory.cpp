@@ -52,6 +52,7 @@ void WaterHistory::update(const WaterData& data, time_t localNow) {
     return;
   }
 
+  rotateMinuteBuckets(localNow);
   rotateBuckets(localNow);
 
   if (!state.haveBaseline) {
@@ -73,6 +74,7 @@ void WaterHistory::update(const WaterData& data, time_t localNow) {
   }
 
   state.hourly[0] += delta;
+  minute[0] += delta;
   state.daily[0] += delta;
   state.weekly[0] += delta;
   state.monthly[0] += delta;
@@ -93,6 +95,13 @@ uint32_t WaterHistory::getHourMilliM3(uint8_t age) const {
     return 0;
   }
   return state.hourly[age];
+}
+
+uint32_t WaterHistory::getMinuteMilliM3(uint8_t age) const {
+  if (age >= MINUTE_BUCKETS) {
+    return 0;
+  }
+  return minute[age];
 }
 
 uint32_t WaterHistory::getDayMilliM3(uint8_t age) const {
@@ -177,6 +186,7 @@ bool WaterHistory::wasLoaded() const {
 
 void WaterHistory::setDefaults() {
   memset(&state, 0, sizeof(state));
+  memset(minute, 0, sizeof(minute));
   state.magic = HISTORY_MAGIC;
   state.version = HISTORY_VERSION;
   state.size = sizeof(PersistedHistory);
@@ -185,6 +195,7 @@ void WaterHistory::setDefaults() {
   state.currentWeekKey = -1;
   state.currentMonthKey = -1;
   state.currentYearKey = -1;
+  currentMinuteKey = -1;
   dirty = false;
 }
 
@@ -258,6 +269,25 @@ bool WaterHistory::save() {
   file.close();
   dirty = bytes == sizeof(state) ? false : dirty;
   return bytes == sizeof(state);
+}
+
+void WaterHistory::rotateMinuteBuckets(time_t localNow) {
+  int32_t minuteKey = localNow >= VALID_TIME_EPOCH ? localNow / 60 : millis() / 60000;
+  if (currentMinuteKey < 0) {
+    currentMinuteKey = minuteKey;
+    return;
+  }
+
+  int32_t minuteDelta = minuteKey - currentMinuteKey;
+  if (minuteDelta <= 0) {
+    return;
+  }
+
+  uint8_t shifts = minuteDelta > MINUTE_BUCKETS ? MINUTE_BUCKETS : minuteDelta;
+  for (int8_t i = MINUTE_BUCKETS - 1; i >= 0; i--) {
+    minute[i] = i >= shifts ? minute[i - shifts] : 0;
+  }
+  currentMinuteKey = minuteKey;
 }
 
 void WaterHistory::rotateBuckets(time_t localNow) {
