@@ -536,12 +536,12 @@ void AppWebServer::handleRoot() {
   body += formatM3(history.getCurrentWeekMilliM3());
   body += F("</span> m3</strong><small>This week water use</small></article>");
 
-  body += F("<article class=\"card accentMeter\"><div class=\"cardTop\"><span>Meter Details</span><b class=\"chip ");
-  body += config.hasMeter() ? F("ok\">Configured") : F("warn\">Missing");
+  body += F("<article class=\"card accentMeter\"><div class=\"cardTop\"><span>Temperature</span><b id=\"temperatureChip\" class=\"chip ");
+  body += waterData.valid ? F("ok\">Live") : F("warn\">Waiting");
   body += F("</b></div><strong><span id=\"waterTemp\">");
-  body += waterData.valid ? String(waterData.waterTemperatureC) + String(" C") : String("--");
+  body += waterData.valid ? String(waterData.waterTemperatureC) + String(" &deg;C") : String("--");
   body += F("</span></strong><small>Water temp, room <span id=\"roomTemp\">");
-  body += waterData.valid ? String(waterData.ambientTemperatureC) + String(" C") : String("--");
+  body += waterData.valid ? String(waterData.ambientTemperatureC) + String(" &deg;C") : String("--");
   body += F("</span></small></article>");
   body += F("</section>");
 
@@ -1015,19 +1015,19 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("\" title=\"Alarm status from Multical alarm bits\"><span class=\"statusDot\"></span><span id=\"topDataText\" class=\"statusText\">");
   html += F("Alarm");
   html += F("</span></span>");
-  html += F("<span class=\"statusPill ");
-  html += cfg.mqttEnabled ? F("statusOk") : F("statusOff");
-  html += F("\" title=\"MQTT ");
-  html += cfg.mqttEnabled ? htmlEscape(cfg.mqttHost) : String("disabled");
-  html += F("\"><span class=\"statusDot\"></span><span class=\"statusText\">");
-  html += F("MQTT");
-  html += F("</span></span>");
   html += F("<span id=\"topTimePill\" class=\"statusPill ");
   html += ntpSynced ? F("statusOk") : (cfg.ntpEnabled ? F("statusWarn") : F("statusOff"));
   html += F("\" title=\"");
   html += cfg.ntpEnabled ? htmlEscape(cfg.ntpServer) : String("NTP disabled");
   html += F("\"><span class=\"statusDot\"></span><span id=\"topTimeText\" class=\"statusText\">");
   html += F("NTP");
+  html += F("</span></span>");
+  html += F("<span class=\"statusPill ");
+  html += cfg.mqttEnabled ? F("statusOk") : F("statusOff");
+  html += F("\" title=\"MQTT ");
+  html += cfg.mqttEnabled ? htmlEscape(cfg.mqttHost) : String("disabled");
+  html += F("\"><span class=\"statusDot\"></span><span class=\"statusText\">");
+  html += F("MQTT");
   html += F("</span></span></div><div class=\"navLinks\">");
   html += F("<a href=\"/\" title=\"Dashboard\"><svg viewBox=\"0 0 24 24\"><path d=\"M3 12l9-9 9 9\"></path><path d=\"M5 10v10h14V10\"></path></svg><span>Dashboard</span></a>");
   html += F("<a href=\"/setup\" title=\"Setup\"><svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"3\"></circle><path d=\"M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.1 2.1-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V20h-3v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-2.1-2.1.1-.1A1.7 1.7 0 0 0 5 15a1.7 1.7 0 0 0-1.5-1H3v-3h.5A1.7 1.7 0 0 0 5 10a1.7 1.7 0 0 0-.3-1.9l-.1-.1 2.1-2.1.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V4h3v.8a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 2.1 2.1-.1.1A1.7 1.7 0 0 0 19 10a1.7 1.7 0 0 0 1.5 1h.5v3h-.5a1.7 1.7 0 0 0-1.1 1z\"></path></svg><span>Setup</span></a>");
@@ -1045,7 +1045,7 @@ void AppWebServer::sendHtml(const String& body) {
 
   html += F("</main><script>");
   html += F("function byId(i){return document.getElementById(i)}function txt(i,v){const e=byId(i);if(e)e.textContent=v}function pill(i,c){const e=byId(i);if(e)e.className='statusPill '+c}function chip(i,c,t){const e=byId(i);if(e){e.className='chip '+c;e.textContent=t}}function rssiClass(v){if(v===null||v===undefined)return'statusOff';if(v>=-85)return'statusOk';if(v>=-100)return'statusWarn';return'statusAlarm'}function fmt(v){return Number(v||0).toFixed(3)}function refreshMinuteGraph(values){if(!values||!byId('minuteBars'))return;let max=0,total=0;values.forEach(v=>{v=Number(v)||0;total+=v;if(v>max)max=v});txt('minuteTotal',fmt(total)+' m3');txt('minutePeak',fmt(max)+' m3/min');values.forEach((v,idx)=>{const age=59-idx,b=document.querySelector('[data-minute-bar=\"'+age+'\"]');if(!b)return;v=Number(v)||0;b.style.height=(!v||!max)?'0%':Math.max(3,Math.round(v*100/max))+'%';b.parentElement.title=(age?'-'+age:'now')+' min: '+fmt(v)+' m3'})}");
-  html += F("async function refreshData(){if(!byId('topFrameText'))return;try{const j=await (await fetch('/data.json',{cache:'no-store'})).json();const age=j.last_frame_age_s;const live=j.valid&&age<90;const a=j.alarms||{};const alarm=a.burst||a.leak;const warn=a.dry||a.reverse;pill('topFramePill',live?'statusOk':(j.valid?'statusWarn':'statusOff'));txt('topFrameText','RX');pill('topSignalPill',rssiClass(j.radio_rssi_dbm));txt('topSignalText',j.radio_rssi_dbm===null?'--dBm':j.radio_rssi_dbm+'dBm');pill('topDataPill',!j.valid?'statusOff':(alarm?'statusAlarm':(warn?'statusWarn':'statusOk')));txt('topDataText','Alarm');pill('topTimePill',j.time_synced?'statusOk':(j.ntp_enabled?'statusWarn':'statusOff'));txt('topTimeText','NTP');txt('heroText',j.valid?'Live water meter data is being decoded and stored locally.':'Waiting for the first valid wireless M-Bus frame.');txt('heroRxAge',j.valid?age+' s':'--');txt('waterTotal',j.valid?Number(j.total_m3).toFixed(3):'--');txt('monthUsage',j.valid?Number(j.month_usage_m3).toFixed(3)+' m3':'-');chip('waterChip',j.valid?'ok':'warn',j.valid?'Live':'Waiting');txt('hourlyUsage',fmt(j.current_hour_m3));txt('todayUsage',fmt(j.today_m3));txt('weeklyUsage',fmt(j.current_week_m3));txt('waterTemp',j.valid?j.water_temperature_c+' C':'--');txt('roomTemp',j.valid?j.ambient_temperature_c+' C':'--');refreshMinuteGraph(j.minute_values_m3)}catch(e){}}setInterval(refreshData,5000);refreshData();");
+  html += F("async function refreshData(){if(!byId('topFrameText'))return;try{const j=await (await fetch('/data.json',{cache:'no-store'})).json();const age=j.last_frame_age_s;const live=j.valid&&age<90;const a=j.alarms||{};const alarm=a.burst||a.leak;const warn=a.dry||a.reverse;pill('topFramePill',live?'statusOk':(j.valid?'statusWarn':'statusOff'));txt('topFrameText','RX');pill('topSignalPill',rssiClass(j.radio_rssi_dbm));txt('topSignalText',j.radio_rssi_dbm===null?'--dBm':j.radio_rssi_dbm+'dBm');pill('topDataPill',!j.valid?'statusOff':(alarm?'statusAlarm':(warn?'statusWarn':'statusOk')));txt('topDataText','Alarm');pill('topTimePill',j.time_synced?'statusOk':(j.ntp_enabled?'statusWarn':'statusOff'));txt('topTimeText','NTP');txt('heroText',j.valid?'Live water meter data is being decoded and stored locally.':'Waiting for the first valid wireless M-Bus frame.');txt('heroRxAge',j.valid?age+' s':'--');txt('waterTotal',j.valid?Number(j.total_m3).toFixed(3):'--');txt('monthUsage',j.valid?Number(j.month_usage_m3).toFixed(3)+' m3':'-');chip('waterChip',j.valid?'ok':'warn',j.valid?'Live':'Waiting');chip('temperatureChip',j.valid?'ok':'warn',j.valid?'Live':'Waiting');txt('hourlyUsage',fmt(j.current_hour_m3));txt('todayUsage',fmt(j.today_m3));txt('weeklyUsage',fmt(j.current_week_m3));txt('waterTemp',j.valid?j.water_temperature_c+' °C':'--');txt('roomTemp',j.valid?j.ambient_temperature_c+' °C':'--');refreshMinuteGraph(j.minute_values_m3)}catch(e){}}setInterval(refreshData,5000);refreshData();");
   html += F("async function scanWifi(){const r=document.getElementById('wifiResult'),l=document.getElementById('wifiList');r.textContent='Scanning...';l.innerHTML='';try{const j=await (await fetch('/wifiscan.json')).json();r.textContent=j.networks.length+' networks';j.networks.forEach(n=>{const d=document.createElement('div');d.className='wifiNet';d.innerHTML='<strong></strong><small></small>';d.querySelector('strong').textContent=n.ssid||'(hidden)';d.querySelector('small').textContent=n.rssi+' dBm ch '+n.channel+(n.secure?' secure':' open');d.onclick=()=>{document.getElementById('wifiSsid').value=n.ssid};l.appendChild(d)})}catch(e){r.textContent='Scan failed'}}");
   html += F("async function testWifi(){const r=document.getElementById('wifiResult');r.textContent='Testing...';const body=new URLSearchParams({ssid:document.getElementById('wifiSsid').value,password:document.getElementById('wifiPassword').value});try{const j=await (await fetch('/wifitest.json',{method:'POST',body})).json();r.textContent=j.ok?'Connected: '+j.ip:'Failed, status '+j.status}catch(e){r.textContent='Test failed'}}");
   html += F("</script></body></html>");
