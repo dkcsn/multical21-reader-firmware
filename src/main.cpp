@@ -440,7 +440,9 @@ void setup() {
 
   webServer.begin();
   Debug.begin(appConfig.data().telnetDebugEnabled);
-  startRadioIfConfigured();
+  if (!setupApMode) {
+    startRadioIfConfigured();
+  }
   Debug.println("Setup done");
 }
 
@@ -458,7 +460,9 @@ void loop() {
   Debug.loop();
   loopNtp();
   waterHistory.loop();
-  startRadioIfConfigured();
+  if (!setupApMode) {
+    startRadioIfConfigured();
+  }
 
   if (radioStarted && appConfig.hasMeter()) {
     if (waterMeter.readFrame(waterData, appConfig.data())) {
