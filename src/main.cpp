@@ -53,6 +53,7 @@ unsigned long lastRadioStartAttempt = 0;
 unsigned long lastMqttAttempt = 0;
 unsigned long lastMqttPublish = 0;
 unsigned long lastNtpAttempt = 0;
+unsigned long lastDebugHeartbeat = 0;
 bool haDiscoveryPublished = false;
 bool ntpConfigured = false;
 bool ntpSyncLogged = false;
@@ -424,6 +425,23 @@ static bool forceSetupRequested() {
   return requested;
 }
 
+static void printDebugStatus(const char* reason) {
+  Debug.print("Status ");
+  Debug.print(reason);
+  Debug.print(": mode ");
+  Debug.print(setupApMode ? "setup-ap" : "wifi");
+  Debug.print(", ip ");
+  Debug.print(WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : WiFi.softAPIP().toString());
+  Debug.print(", ntp ");
+  Debug.print(isNtpSynced() ? "synced" : (appConfig.data().ntpEnabled ? "waiting" : "off"));
+  Debug.print(", radio ");
+  Debug.print(waterData.radioPresent ? (waterData.radioStarted ? "running" : "detected-not-running") : "not-detected");
+  Debug.print(", meter ");
+  Debug.print(appConfig.hasMeter() ? "configured" : "not-configured");
+  Debug.print(", last frame ");
+  Debug.println(waterData.valid ? String((millis() - waterData.lastFrameMillis) / 1000) + String(" s") : String("none"));
+}
+
 void setup() {
   pinMode(PIN_LED_BUILTIN, OUTPUT);
   digitalWrite(PIN_LED_BUILTIN, HIGH);
@@ -485,6 +503,18 @@ void loop() {
 
   webServer.handleClient();
   Debug.loop();
+  static bool debugClientWasConnected = false;
+  const bool debugClientConnected = Debug.hasClient();
+  if (debugClientConnected && !debugClientWasConnected) {
+    printDebugStatus("telnet-connected");
+  }
+  debugClientWasConnected = debugClientConnected;
+
+  if (Debug.isEnabled() && millis() - lastDebugHeartbeat > 30000) {
+    lastDebugHeartbeat = millis();
+    printDebugStatus("heartbeat");
+  }
+
   loopNtp();
   waterHistory.loop();
   if (!setupApMode) {
