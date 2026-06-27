@@ -71,6 +71,26 @@ size_t DebugLog::print(char value) {
   return 1;
 }
 
+size_t DebugLog::print(int value) {
+  String text(value);
+  return print(text);
+}
+
+size_t DebugLog::print(unsigned int value) {
+  String text(value);
+  return print(text);
+}
+
+size_t DebugLog::print(long value) {
+  String text(value);
+  return print(text);
+}
+
+size_t DebugLog::print(unsigned long value) {
+  String text(value);
+  return print(text);
+}
+
 size_t DebugLog::println() {
   Serial.println();
   static const char newline[] = "\r\n";

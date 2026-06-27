@@ -20,6 +20,10 @@ public:
   size_t print(const String& value);
   size_t print(const char* value);
   size_t print(char value);
+  size_t print(int value);
+  size_t print(unsigned int value);
+  size_t print(long value);
+  size_t print(unsigned long value);
   size_t println();
   size_t println(const String& value);
   size_t println(const char* value);
