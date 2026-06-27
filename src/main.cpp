@@ -57,6 +57,7 @@ unsigned long lastDebugHeartbeat = 0;
 bool haDiscoveryPublished = false;
 bool ntpConfigured = false;
 bool ntpSyncLogged = false;
+bool telnetDebugConfigured = false;
 
 static String chipIdHex() {
 #if defined(ESP32)
@@ -425,6 +426,16 @@ static bool forceSetupRequested() {
   return requested;
 }
 
+static void syncTelnetDebug() {
+  const bool enabled = appConfig.data().telnetDebugEnabled;
+  if (enabled == telnetDebugConfigured) {
+    return;
+  }
+  telnetDebugConfigured = enabled;
+  Debug.begin(enabled);
+  Debug.println(enabled ? "Telnet debug enabled from setup" : "Telnet debug disabled from setup");
+}
+
 static void printDebugStatus(const char* reason) {
   Debug.print("Status ");
   Debug.print(reason);
@@ -484,7 +495,8 @@ void setup() {
   }
 
   webServer.begin();
-  Debug.begin(appConfig.data().telnetDebugEnabled);
+  telnetDebugConfigured = appConfig.data().telnetDebugEnabled;
+  Debug.begin(telnetDebugConfigured);
   if (!setupApMode) {
     startRadioIfConfigured();
   }
@@ -502,6 +514,7 @@ void loop() {
   }
 
   webServer.handleClient();
+  syncTelnetDebug();
   Debug.loop();
   static bool debugClientWasConnected = false;
   const bool debugClientConnected = Debug.hasClient();
