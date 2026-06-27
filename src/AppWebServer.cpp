@@ -723,21 +723,15 @@ void AppWebServer::handleHardwarePage() {
   body += F("<div class=\"ccModule\"><div class=\"ccPins\"><span>VCC</span><span>GND</span><span>MOSI</span><span>SCLK</span><span>MISO</span><span>GDO2</span><span>GDO0</span><span>CSN</span></div><div class=\"ccBoard\"><strong>CC1101<br>868 MHz</strong></div></div>");
   body += F("<p class=\"hint\">Pin order matches the CC1101 module picture: power pins at the top, CSN at the bottom.</p></section>");
 
-  body += F("<section><div class=\"sectionHead\"><h2>Soldering diagram</h2><span>Expected wiring</span></div>");
-  body += F("<div class=\"wireDiagram\"><div><h3>CC1101</h3><code>VCC<br>GND<br>MOSI<br>SCLK<br>MISO<br>GDO2<br>GDO0<br>CSN</code></div>");
-  body += F("<div class=\"wireLines\"><span>--------></span><span>--------></span><span>--------></span><span>--------></span><span>--------></span><span>--------></span><span>--------></span><span>--------></span></div>");
-  body += F("<div><h3>");
-  body += htmlEscape(hardwareBoardProfile());
-  body += F("</h3><code>");
-#if defined(BOARD_LOLIN_S2_MINI)
-  body += F("3V3<br>GND<br>GPIO11<br>GPIO7<br>GPIO9<br>GPIO5 unused<br>GPIO13<br>GPIO12");
-#elif defined(ESP8266)
-  body += F("3V3<br>GND<br>D7 / GPIO13<br>D5 / GPIO14<br>D6 / GPIO12<br>not connected<br>D2 / GPIO4<br>D8 / GPIO15");
-#else
-  body += F("3V3<br>GND<br>");
-  body += pinLabel(MOSI) + F("<br>") + pinLabel(SCK) + F("<br>") + pinLabel(MISO) + F("<br>not connected<br>") + pinLabel(CC1101_GDO0) + F("<br>") + pinLabel(SS);
-#endif
-  body += F("</code></div></div><p class=\"hint\">GDO0 is the interrupt line. GDO2 is optional and not used by this firmware.</p></section>");
+  body += F("<section><div class=\"sectionHead\"><h2>Board wiring</h2><span>Both supported boards</span></div>");
+  body += F("<div class=\"wiringCards\">");
+  body += F("<div class=\"boardMap\"><h3>LOLIN S2 Mini</h3><table><tbody>");
+  body += F("<tr><th>VCC</th><td>3V3</td></tr><tr><th>GND</th><td>GND</td></tr><tr><th>MOSI</th><td>GPIO11</td></tr><tr><th>SCLK</th><td>GPIO7</td></tr><tr><th>MISO</th><td>GPIO9</td></tr><tr><th>GDO2</th><td>GPIO5 unused</td></tr><tr><th>GDO0</th><td>GPIO13</td></tr><tr><th>CSN</th><td>GPIO12</td></tr>");
+  body += F("</tbody></table></div>");
+  body += F("<div class=\"boardMap\"><h3>D1 mini Lite / ESP8266</h3><table><tbody>");
+  body += F("<tr><th>VCC</th><td>3V3</td></tr><tr><th>GND</th><td>GND</td></tr><tr><th>MOSI</th><td>D7 / GPIO13</td></tr><tr><th>SCLK</th><td>D5 / GPIO14</td></tr><tr><th>MISO</th><td>D6 / GPIO12</td></tr><tr><th>GDO2</th><td>not connected</td></tr><tr><th>GDO0</th><td>D2 / GPIO4</td></tr><tr><th>CSN</th><td>D8 / GPIO15</td></tr>");
+  body += F("</tbody></table></div>");
+  body += F("</div><p class=\"hint\">GDO0 is the interrupt line. GDO2 is optional and not used by this firmware. The two boards must be wired differently.</p></section>");
   sendHtml(body);
 }
 
@@ -1174,7 +1168,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px;font-style:normal}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0}.barwrap:nth-child(2n) .bar{background:#147d64}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
   html += F(".minutePanel{padding-bottom:12px}.minuteBars{height:176px;display:grid;grid-template-columns:repeat(30,1fr);gap:3px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden;background:linear-gradient(to top,#f8fafc,#fff)}.minuteWrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:9px;font-style:normal}.minuteBar{align-self:end;background:#0b7285;border-radius:3px 3px 0 0;min-height:0}.minuteWrap:nth-child(2n) .minuteBar{background:#147d64}.minuteWrap span{white-space:nowrap;overflow:hidden;text-overflow:clip}.minuteLiters{font-weight:700;color:#102a43}.minuteAge{color:#52606d}");
   html += F(".pinTable{width:100%;border-collapse:collapse}.pinTable th,.pinTable td{border-bottom:1px solid #d9e2ec;text-align:left;padding:9px;font-size:13px}.pinTable th{color:#52606d;text-transform:uppercase;font-size:11px}.wireDiagram{display:grid;grid-template-columns:max-content max-content max-content;gap:16px;align-items:start;overflow:auto}.wireDiagram h3{font-size:14px;margin:0 0 8px;color:#102a43}.wireDiagram code{display:block;line-height:1.8;background:#f8fafc;border:1px solid #d9e2ec;border-radius:6px;padding:10px;white-space:nowrap}.wireLines{display:grid;gap:0;margin-top:28px;color:#0b7285;font-weight:900;line-height:1.8}");
-  html += F(".setupTabs{margin:-2px 0 14px}.ccModule{display:grid;grid-template-columns:max-content 220px;gap:12px;align-items:stretch;overflow:auto}.ccPins{display:grid;grid-template-rows:repeat(8,1fr);gap:4px}.ccPins span{min-width:68px;padding:6px 8px;background:#f8fafc;border:1px solid #d9e2ec;border-radius:5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800}.ccBoard{border:2px solid #147d64;background:#e6fcf5;border-radius:6px;display:grid;place-items:center;text-align:center;color:#0b7285;min-height:260px}.ccBoard strong{font-size:22px;line-height:1.35}");
+  html += F(".setupTabs{margin:-2px 0 14px}.ccModule{display:grid;grid-template-columns:max-content 220px;gap:12px;align-items:stretch;overflow:auto}.ccPins{display:grid;grid-template-rows:repeat(8,1fr);gap:4px}.ccPins span{min-width:68px;padding:6px 8px;background:#f8fafc;border:1px solid #d9e2ec;border-radius:5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800}.ccBoard{border:2px solid #147d64;background:#e6fcf5;border-radius:6px;display:grid;place-items:center;text-align:center;color:#0b7285;min-height:260px}.ccBoard strong{font-size:22px;line-height:1.35}.wiringCards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.boardMap{border:1px solid #d9e2ec;border-radius:8px;padding:12px;background:#f8fafc}.boardMap h3{margin:0 0 8px;font-size:15px;color:#102a43}.boardMap table{width:100%;border-collapse:collapse}.boardMap th,.boardMap td{text-align:left;border-top:1px solid #d9e2ec;padding:7px 6px;font-size:13px}.boardMap th{width:76px;color:#52606d;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.boardMap td{font-weight:800;color:#102a43}");
   html += F("@media(max-width:1200px){.cards{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}}@media(max-width:980px){header{grid-template-columns:1fr}.statusGroup,.navLinks{justify-content:flex-start;flex-wrap:wrap}.statusGroup{overflow:visible}.navLinks{border-left:0;padding-left:0;border-top:1px solid #486581;padding-top:8px}}@media(max-width:640px){main{padding:12px}.hero{grid-template-columns:1fr}.hero h2{font-size:24px}dl{grid-template-columns:1fr}.heroMeter strong{font-size:30px}nav a span{display:none}.statusPill{min-width:62px}}");
   html += F("</style></head><body><header><h1>Multical 21 Reader</h1><nav class=\"topRight\"><div class=\"statusGroup\">");
   html += F("<span id=\"topFramePill\" class=\"statusPill ");
