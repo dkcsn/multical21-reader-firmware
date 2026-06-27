@@ -141,7 +141,7 @@
 #define CC1101_DEFVAL_MCSM1      0x00        // Main Radio Control State Machine Configuration
 
 #define CC1101_DEFVAL_IOCFG2     0x2E        // GDO2 Output Pin Configuration
-#define CC1101_DEFVAL_IOCFG0     0x01        // GDO0 asserts when RX FIFO reaches threshold or packet ends
+#define CC1101_DEFVAL_IOCFG0     0x06        // GDO0 asserts on sync word and de-asserts at packet end
 
 #define CC1101_DEFVAL_FSCTRL1    0x08        // Frequency Synthesizer Control
 #define CC1101_DEFVAL_FSCTRL0    0x00        // Frequency Synthesizer Control
