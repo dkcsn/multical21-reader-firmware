@@ -135,7 +135,13 @@ static bool isNtpSynced() {
 }
 
 static void loopNtp() {
-  if (setupApMode || !appConfig.data().ntpEnabled || WiFi.status() != WL_CONNECTED) {
+  if (setupApMode || !appConfig.data().ntpEnabled) {
+    return;
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
+    ntpConfigured = false;
+    ntpSyncLogged = false;
     return;
   }
 
