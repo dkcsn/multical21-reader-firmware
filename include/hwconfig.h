@@ -13,6 +13,7 @@
 // GD2   => not connected 
   #define CC1101_GDO0         D2   // GDO0 input interrupt pin
   #define PIN_LED_BUILTIN     D4
+  #define FORCE_SETUP_PIN     0    // FLASH button, active low
 #elif defined(ESP32)
 // Attach CC1101 pins to ESP32 SPI pins
 // VCC   => 3V3
@@ -27,6 +28,7 @@
 // attach CC1101 pins to ESP32 SPI pins
 
   #define CC1101_GDO0          32
+  #define FORCE_SETUP_PIN      0   // BOOT button, active low
 #if defined(BOARD_LOLIN_S2_MINI)
   #define PIN_LED_BUILTIN      15
 #else

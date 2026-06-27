@@ -405,6 +405,25 @@ static void startRadioIfConfigured() {
   Debug.println(radioStarted ? "CC1101 receiver started" : "CC1101 receiver not started");
 }
 
+static bool forceSetupRequested() {
+  pinMode(FORCE_SETUP_PIN, INPUT_PULLUP);
+  const unsigned long started = millis();
+  bool requested = false;
+
+  while (millis() - started < 2500) {
+    if (digitalRead(FORCE_SETUP_PIN) == LOW) {
+      requested = true;
+      break;
+    }
+    delay(25);
+  }
+
+  if (requested) {
+    Debug.println("Setup AP forced by BOOT/FLASH button");
+  }
+  return requested;
+}
+
 void setup() {
   pinMode(PIN_LED_BUILTIN, OUTPUT);
   digitalWrite(PIN_LED_BUILTIN, HIGH);
@@ -429,7 +448,9 @@ void setup() {
   appConfig.begin();
   waterHistory.begin();
 
-  if (!connectWifi()) {
+  const bool forceSetup = forceSetupRequested();
+
+  if (forceSetup || !connectWifi()) {
     startSetupAp();
   } else {
     setupNtp();
