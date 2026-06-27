@@ -34,19 +34,18 @@ Fibaro Home Center, OTA firmware, captive portal, water usage graphs.
   automation systems.
 - Browser OTA firmware upload from `/firmware`.
 - Optional Telnet debug on port 23 with mirrored serial diagnostics.
-- GitHub Actions release builds for ESP32, ESP8266, and ESP8266 D1 mini Lite.
+- GitHub Actions release builds for ESP8266 D1 mini Lite and LOLIN S2 Mini.
 
 ## Supported Hardware
 
 - Kamstrup Multical 21 water meter with wireless M-Bus.
 - CC1101 868 MHz radio module connected over SPI.
-- ESP8266 D1 mini.
 - ESP8266 D1 mini Lite.
-- ESP32 boards supported by the PlatformIO `esp32` environment.
+- LOLIN S2 Mini / ESP32-S2.
 
-The default PlatformIO environment is `esp8266_lite`, because that is a common
-small D1 mini Lite target with 1 MB flash. Use the matching firmware binary for
-your board.
+The default PlatformIO environment is `esp8266_lite`, because that is the known
+working D1 mini Lite target with 1 MB flash. Use the matching firmware binary
+for your board.
 
 ## Screenshots
 <img width="1242" height="1207" alt="image" src="https://github.com/user-attachments/assets/c2f1ce47-d7eb-49d1-b4c0-c27d660cb772" />
@@ -60,8 +59,8 @@ your board.
 2. Join the WiFi network `Multical21-Setup`.
 3. Open the captive portal prompt, or browse to `http://192.168.4.1/`.
 4. Scan/test WiFi.
-5. Enter meter serial as 8 hex characters.
-6. Enter AES key as 32 hex characters.
+5. Enter meter serial as 8 hex characters. The UI validates plain hex only.
+6. Enter AES key as 32 hex characters. The UI validates plain hex only.
 7. Configure MQTT/Home Assistant if needed.
 8. Save and reboot.
 
@@ -89,6 +88,8 @@ Do not include `0x`, commas, or spaces in the web UI fields.
 - `/dayplot.json` - 24 hour plot data.
 - `/monthplot.json` - 31 day plot data.
 - `/version.json` - firmware version, build date, board, and git SHA.
+- `/diagnostics.json` - downloadable diagnostic bundle with firmware, network,
+  NTP, CC1101/radio, and configuration status.
 
 If mDNS is available on your network, the device can also be reached by the
 configured device name, for example:
@@ -146,14 +147,19 @@ For ESP8266 D1 mini Lite, use:
 multical21-reader-<version>-esp8266-lite.bin
 ```
 
+For LOLIN S2 Mini / ESP32-S2, use:
+
+```text
+multical21-reader-<version>-lolin-s2-mini.bin
+```
+
 ## GitHub Release Binaries
 
 Every pushed `v*` tag starts the release workflow. GitHub Actions builds and
 attaches:
 
-- `multical21-reader-<version>-esp32.bin`
-- `multical21-reader-<version>-esp8266.bin`
 - `multical21-reader-<version>-esp8266-lite.bin`
+- `multical21-reader-<version>-lolin-s2-mini.bin`
 - `SHA256SUMS.txt`
 
 ## Build Locally
@@ -164,11 +170,15 @@ Install PlatformIO and build the default ESP8266 Lite target:
 pio run
 ```
 
-Build all supported environments:
+Build all release environments:
 
 ```sh
-pio run -e esp32 -e esp8266 -e esp8266_lite
+pio run -e esp8266_lite -e lolin_s2_mini
 ```
+
+The repository still contains generic ESP8266/ESP32 environments for local
+experiments, but release binaries are produced for the two known working board
+profiles above.
 
 ## Force Setup / Captive Portal
 
@@ -185,6 +195,19 @@ pio run -e esp32 -e esp8266 -e esp8266_lite
 
 Telnet debug is useful for checking CC1101 packet interrupts, radio RSSI,
 wireless M-Bus frame validation, meter serial matching, and AES decrypt status.
+
+## Diagnostics
+
+Open `/hardware` and use **Download diagnostics**, or browse directly to:
+
+```text
+http://<device-ip>/diagnostics.json
+```
+
+The file includes firmware version, board, IP/hostname, NTP attempts/sync age,
+CC1101 detection, radio profile, last accepted/rejected frame, MQTT/HA status,
+and whether meter serial/AES are configured. It does not expose WiFi password,
+MQTT password, AES key, or meter serial.
 
 ## Project Lineage
 

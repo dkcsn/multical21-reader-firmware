@@ -35,12 +35,11 @@ jobs:
           BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 
           export PLATFORMIO_BUILD_FLAGS="-D FW_VERSION=\\\"${VERSION}\\\" -D FW_GIT_SHA=\\\"${SHORT_SHA}\\\" -D FW_BUILD_DATE=\\\"${BUILD_DATE}\\\""
-          platformio run -e esp32 -e esp8266 -e esp8266_lite
+          platformio run -e esp8266_lite -e lolin_s2_mini
 
           mkdir -p dist
-          cp .pio/build/esp32/firmware.bin "dist/multical21-reader-${VERSION}-esp32.bin"
-          cp .pio/build/esp8266/firmware.bin "dist/multical21-reader-${VERSION}-esp8266.bin"
           cp .pio/build/esp8266_lite/firmware.bin "dist/multical21-reader-${VERSION}-esp8266-lite.bin"
+          cp .pio/build/lolin_s2_mini/firmware.bin "dist/multical21-reader-${VERSION}-lolin-s2-mini.bin"
           sha256sum dist/*.bin > dist/SHA256SUMS.txt
 
       - name: Upload firmware artifacts
@@ -54,3 +53,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
+          body: |
+            Firmware binaries:
+
+            - `multical21-reader-${{ github.ref_name }}-esp8266-lite.bin` for D1 mini Lite / ESP8266 Lite builds.
+            - `multical21-reader-${{ github.ref_name }}-lolin-s2-mini.bin` for LOLIN S2 Mini ESP32-S2 builds.
+
+            Use the binary that matches the board you flashed originally. SHA256 checksums are attached in `SHA256SUMS.txt`.

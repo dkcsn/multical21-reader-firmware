@@ -177,6 +177,13 @@ static String systemTimeEpochString() {
   return now >= 1600000000 ? String((uint32_t) now) : String("not synced");
 }
 
+static String ageText(unsigned long eventMillis) {
+  if (eventMillis == 0) {
+    return F("never");
+  }
+  return String((millis() - eventMillis) / 1000) + String(" s ago");
+}
+
 static String updateErrorText() {
 #if defined(ESP8266)
   return Update.getErrorString();
@@ -458,7 +465,7 @@ static bool isOpenNetwork(uint8_t index) {
 #endif
 }
 
-static String buildSetupSection(AppConfig& config, bool onboardingMode) {
+static String buildSetupSection(AppConfig& config, WaterData& waterData, bool onboardingMode, const String& error = String()) {
   const AppConfigData& cfg = config.data();
   const String deviceIp = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
   String out;
@@ -470,6 +477,11 @@ static String buildSetupSection(AppConfig& config, bool onboardingMode) {
   out += onboardingMode ? F("Setup AP") : F("Settings");
   out += F("</span></div>");
   out += setupTabs(false);
+  if (error.length() > 0) {
+    out += F("<div class=\"formError\"><strong>Settings not saved</strong><span>");
+    out += htmlEscape(error);
+    out += F("</span></div>");
+  }
   out += F("<form class=\"setupForm\" method=\"post\" action=\"/save\">");
   out += F("<div class=\"formSection\"><h3>WiFi</h3><div class=\"formGrid\"><label>Device name<input name=\"deviceName\" value=\"");
   out += htmlEscape(config.deviceName());
@@ -497,9 +509,21 @@ static String buildSetupSection(AppConfig& config, bool onboardingMode) {
   out += F("<label>Timezone offset minutes<input name=\"timezoneOffsetMinutes\" inputmode=\"numeric\" value=\"");
   out += String(cfg.timezoneOffsetMinutes);
   out += F("\"></label><div class=\"statusLine\"><span>NTP status</span><strong id=\"ntpStatusValue\">");
-  out += systemTimeSynced() ? F("Synced") : F("Waiting");
+  out += !cfg.ntpEnabled ? F("Disabled") : (systemTimeSynced() ? F("Synced") : F("Waiting"));
   out += F("</strong><small id=\"ntpStatusHint\">");
-  out += systemTimeSynced() ? systemTimeEpochString() : F("Retries every 30 seconds after WiFi connects");
+  if (!cfg.ntpEnabled) {
+    out += F("NTP disabled");
+  } else if (systemTimeSynced()) {
+    out += F("Epoch ");
+    out += systemTimeEpochString();
+    out += F(", synced ");
+    out += ageText(waterData.ntpLastSyncMillis);
+  } else {
+    out += F("Last attempt ");
+    out += ageText(waterData.ntpLastAttemptMillis);
+    out += F(", attempts ");
+    out += String(waterData.ntpAttemptCount);
+  }
   out += F("</small></div></div></div>");
   out += F("<div class=\"formSection\"><h3>MQTT</h3><div class=\"formGrid\"><label>MQTT enabled<select name=\"mqttEnabled\"><option value=\"1\"");
   out += cfg.mqttEnabled ? F(" selected") : F("");
@@ -551,10 +575,10 @@ static String buildSetupSection(AppConfig& config, bool onboardingMode) {
   out += F(" 23</small></label></div></div>");
   out += F("<div class=\"formSection\"><h3>Meter</h3><div class=\"formGrid\"><label>Meter serial hex<input name=\"meterSerial\" value=\"");
   out += htmlEscape(config.meterSerialHex());
-  out += F("\" maxlength=\"8\"></label>");
+  out += F("\" maxlength=\"8\" inputmode=\"text\" pattern=\"[A-Fa-f0-9]{8}\" title=\"8 hex characters, no 0x, spaces, or commas\"></label>");
   out += F("<label>AES key hex<input name=\"encryptionKey\" type=\"password\" placeholder=\"");
   out += config.hasMeter() ? F("***") : F("32 hex chars");
-  out += F("\" maxlength=\"32\"></label></div></div>");
+  out += F("\" maxlength=\"32\" inputmode=\"text\" pattern=\"[A-Fa-f0-9]{32}\" title=\"32 hex characters, no 0x, spaces, or commas\"></label><small class=\"formHint\">Use plain hex only. Example serial: 77513579. Example AES key length: 32 characters.</small></div></div>");
   out += F("<div class=\"actionRow\"><button type=\"submit\">Save settings</button></div></form>");
   out += F("<div class=\"formSection deviceActions\"><h3>Device actions</h3><div class=\"actionRow\"><form method=\"post\" action=\"/reboot\"><button type=\"submit\">Reboot</button></form>");
   out += F("<form method=\"post\" action=\"/reset-config\"><button class=\"danger\" type=\"submit\">Reset setup</button></form></div></div></section>");
@@ -578,6 +602,7 @@ void AppWebServer::begin() {
   server.on("/dayplot.json", HTTP_GET, std::bind(&AppWebServer::handleDayPlotJson, this));
   server.on("/monthplot.json", HTTP_GET, std::bind(&AppWebServer::handleMonthPlotJson, this));
   server.on("/version.json", HTTP_GET, std::bind(&AppWebServer::handleVersionJson, this));
+  server.on("/diagnostics.json", HTTP_GET, std::bind(&AppWebServer::handleDiagnosticsJson, this));
   server.on("/wifiscan.json", HTTP_GET, std::bind(&AppWebServer::handleWifiScanJson, this));
   server.on("/wifitest.json", HTTP_POST, std::bind(&AppWebServer::handleWifiTestJson, this));
   server.on("/generate_204", HTTP_GET, std::bind(&AppWebServer::handleCaptiveRedirect, this));
@@ -606,7 +631,7 @@ void AppWebServer::handleRoot() {
 
   String body;
   if (onboardingMode) {
-    body += buildSetupSection(config, true);
+    body += buildSetupSection(config, waterData, true);
   }
   body += F("<section class=\"hero\"><div><p class=\"eyebrow\">Kamstrup Multical 21</p><h2>Water reader dashboard</h2><p id=\"heroText\" class=\"heroText\">");
   body += htmlEscape(heroStatus);
@@ -665,7 +690,7 @@ void AppWebServer::handleRoot() {
 
 void AppWebServer::handleSetupPage() {
   const bool onboardingMode = WiFi.status() != WL_CONNECTED || !config.hasWifi();
-  sendHtml(buildSetupSection(config, onboardingMode));
+  sendHtml(buildSetupSection(config, waterData, onboardingMode));
 }
 
 void AppWebServer::handleGraphsPage() {
@@ -698,7 +723,7 @@ void AppWebServer::handleHardwarePage() {
   body += htmlEscape(hardwareBoardProfile());
   body += F("</dd><dt>Firmware board</dt><dd>");
   body += htmlEscape(firmwareBoardName());
-  body += F("</dd></dl></section>");
+  body += F("</dd><dt>Diagnostics</dt><dd><a class=\"buttonLink\" href=\"/diagnostics.json\">Download diagnostics</a></dd></dl></section>");
 
   const uint32_t lastFrameAgeSeconds = waterData.valid ? (millis() - waterData.lastFrameMillis) / 1000 : 0;
   const uint32_t lastRejectAgeSeconds = waterData.lastRejectedFrameMillis > 0 ? (millis() - waterData.lastRejectedFrameMillis) / 1000 : 0;
@@ -980,6 +1005,12 @@ void AppWebServer::handleDataJson() {
   json += F("\"");
   json += F(",\"time_epoch\":");
   json += systemTimeSynced() ? String((uint32_t) time(nullptr)) : F("null");
+  json += F(",\"ntp_attempts\":");
+  json += waterData.ntpAttemptCount;
+  json += F(",\"ntp_last_attempt_age_s\":");
+  json += waterData.ntpLastAttemptMillis > 0 ? String((millis() - waterData.ntpLastAttemptMillis) / 1000) : F("null");
+  json += F(",\"ntp_last_sync_age_s\":");
+  json += waterData.ntpLastSyncMillis > 0 ? String((millis() - waterData.ntpLastSyncMillis) / 1000) : F("null");
   json += F(",\"water_temperature_c\":");
   json += waterData.waterTemperatureC;
   json += F(",\"ambient_temperature_c\":");
@@ -1053,6 +1084,73 @@ void AppWebServer::handleVersionJson() {
   json += F("\",\"board\":\"");
   json += jsonEscape(firmwareBoardName());
   json += F("\"}");
+  server.send(200, "application/json", json);
+}
+
+void AppWebServer::handleDiagnosticsJson() {
+  const AppConfigData& cfg = config.data();
+  String json;
+  json.reserve(1400);
+  json += F("{\"firmware\":{\"version\":\"");
+  json += jsonEscape(firmwareVersion());
+  json += F("\",\"git_sha\":\"");
+  json += jsonEscape(firmwareGitSha());
+  json += F("\",\"build_date\":\"");
+  json += jsonEscape(firmwareBuildDate());
+  json += F("\",\"board\":\"");
+  json += jsonEscape(firmwareBoardName());
+  json += F("\"},\"network\":{\"mode\":\"");
+  json += WiFi.status() == WL_CONNECTED ? F("wifi") : F("setup-ap");
+  json += F("\",\"ip\":\"");
+  json += WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
+  json += F("\",\"hostname\":\"");
+  json += jsonEscape(config.deviceName());
+  json += F("\",\"ssid_configured\":");
+  json += strlen(cfg.wifiSsid) > 0 ? F("true") : F("false");
+  json += F("},\"time\":{\"ntp_enabled\":");
+  json += cfg.ntpEnabled ? F("true") : F("false");
+  json += F(",\"ntp_server\":\"");
+  json += jsonEscape(cfg.ntpServer);
+  json += F("\",\"synced\":");
+  json += systemTimeSynced() ? F("true") : F("false");
+  json += F(",\"epoch\":");
+  json += systemTimeSynced() ? String((uint32_t) time(nullptr)) : F("null");
+  json += F(",\"attempts\":");
+  json += waterData.ntpAttemptCount;
+  json += F(",\"last_attempt_age_s\":");
+  json += waterData.ntpLastAttemptMillis > 0 ? String((millis() - waterData.ntpLastAttemptMillis) / 1000) : F("null");
+  json += F(",\"last_sync_age_s\":");
+  json += waterData.ntpLastSyncMillis > 0 ? String((millis() - waterData.ntpLastSyncMillis) / 1000) : F("null");
+  json += F("},\"radio\":{\"present\":");
+  json += waterData.radioPresent ? F("true") : F("false");
+  json += F(",\"started\":");
+  json += waterData.radioStarted ? F("true") : F("false");
+  json += F(",\"status\":\"");
+  json += jsonEscape(radioStatusText(waterData, config.hasMeter()));
+  json += F("\",\"profile\":\"known good 0x06 / falling edge, polling-assisted RX\",\"partnum\":");
+  json += waterData.radioPresent ? String(waterData.radioPartnum) : F("null");
+  json += F(",\"version\":");
+  json += waterData.radioPresent ? String(waterData.radioVersion) : F("null");
+  json += F(",\"rssi_dbm\":");
+  json += waterData.radioRssiValid ? String(waterData.radioRssiDbm) : F("null");
+  json += F(",\"last_frame_age_s\":");
+  json += waterData.valid ? String((millis() - waterData.lastFrameMillis) / 1000) : F("null");
+  json += F(",\"last_rejected\":\"");
+  json += jsonEscape(waterData.lastRejectedFrame);
+  json += F("\",\"last_rejected_age_s\":");
+  json += waterData.lastRejectedFrameMillis > 0 ? String((millis() - waterData.lastRejectedFrameMillis) / 1000) : F("null");
+  json += F("},\"config\":{\"meter_configured\":");
+  json += config.hasMeter() ? F("true") : F("false");
+  json += F(",\"mqtt_enabled\":");
+  json += cfg.mqttEnabled ? F("true") : F("false");
+  json += F(",\"mqtt_host_configured\":");
+  json += strlen(cfg.mqttHost) > 0 ? F("true") : F("false");
+  json += F(",\"home_assistant_discovery\":");
+  json += cfg.homeAssistantDiscovery ? F("true") : F("false");
+  json += F(",\"telnet_debug_enabled\":");
+  json += cfg.telnetDebugEnabled ? F("true") : F("false");
+  json += F("}}");
+  server.sendHeader("Content-Disposition", "attachment; filename=\"multical21-diagnostics.json\"");
   server.send(200, "application/json", json);
 }
 
@@ -1172,13 +1270,19 @@ void AppWebServer::handleSave() {
 
   String meterSerial = server.arg("meterSerial");
   if (meterSerial.length() > 0 && !config.setMeterSerialHex(meterSerial)) {
-    server.send(400, "text/plain", "Meter serial must be 8 hex characters");
+    String body;
+    body += buildSetupSection(config, waterData, false, F("Meter serial must be exactly 8 hex characters. Do not use 0x, spaces, or commas."));
+    server.sendHeader("Cache-Control", "no-store");
+    sendHtml(body);
     return;
   }
 
   String encryptionKey = server.arg("encryptionKey");
   if (encryptionKey.length() > 0 && encryptionKey != "***" && !config.setEncryptionKeyHex(encryptionKey)) {
-    server.send(400, "text/plain", "AES key must be 32 hex characters");
+    String body;
+    body += buildSetupSection(config, waterData, false, F("AES key must be exactly 32 hex characters. Do not use 0x, spaces, or commas."));
+    server.sendHeader("Cache-Control", "no-store");
+    sendHtml(body);
     return;
   }
 
@@ -1222,7 +1326,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F(".hero{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:18px;align-items:center;background:#12344d;color:white;border-color:#12344d}.hero h2{font-size:28px;margin:0 0 8px}.eyebrow{margin:0 0 6px;color:#9fb3c8;font-size:12px;font-weight:800;text-transform:uppercase}.heroText{margin:0;color:#d9e2ec;white-space:pre-line}.heroAction{margin:10px 0 0}.heroAction:empty{display:none}.heroAction a{display:inline-flex;color:white;background:#0b7285;text-decoration:none;border-radius:5px;padding:7px 10px;font-weight:800;font-size:12px}.heroMeter{border:1px solid #486581;border-radius:8px;padding:14px;background:#0f2f46}.heroMeter span,.heroMeter small{display:block;color:#bcccdc}.heroMeter strong{display:block;font-size:34px;line-height:1.1;margin:4px 0}");
   html += F(".cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;background:transparent;border:0;padding:0}.card{background:white;border:1px solid #d9e2ec;border-left:5px solid #0b7285;border-radius:8px;padding:14px;min-height:108px;display:grid;gap:10px}.cardTop{display:flex;justify-content:space-between;gap:8px;align-items:center}.cardTop span{font-size:12px;color:#52606d;font-weight:800;text-transform:uppercase}.card strong{font-size:22px;line-height:1.15;overflow-wrap:anywhere}.card small{color:#52606d;overflow-wrap:anywhere}.card a{font-size:22px;font-weight:800}.chip{border-radius:999px;padding:4px 8px;font-size:11px;color:white;white-space:nowrap}.ok{background:#147d64}.warn{background:#b7791f}.off{background:#627d98}.accentRx{border-left-color:#147d64}.accentWater{border-left-color:#0b7285}.accentUsage{border-left-color:#2f9e44}.accentDaily{border-left-color:#1864ab}.accentWeekly{border-left-color:#6741d9}.accentWifi{border-left-color:#1864ab}.accentMqtt{border-left-color:#6741d9}.accentTime{border-left-color:#d9480f}.accentMeter{border-left-color:#c2410c}.accentVersion{border-left-color:#087f5b}");
   html += F(".sectionHead{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin:0 0 10px}.sectionHead h2{margin:0}.sectionHead span{color:#52606d;font-size:12px;font-weight:700;text-transform:uppercase}.graphPanel{padding-bottom:12px}.graphSummary{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px}.graphSummary span{background:#f0f4f8;border:1px solid #d9e2ec;border-radius:6px;padding:7px 9px;color:#52606d;font-size:12px}.graphSummary strong{color:#102a43}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}.tab{border:1px solid #bcccdc;background:#f0f4f8;color:#102a43;text-decoration:none;border-radius:6px;padding:8px 10px;font-weight:800;font-size:13px}.tab.active{background:#0b7285;border-color:#0b7285;color:white}");
-  html += F(".setupPanel{border-left:5px solid #0b7285}.setupForm{display:block}.formSection{border-top:1px solid #d9e2ec;padding-top:14px;margin-top:14px}.formSection:first-of-type{border-top:0;padding-top:0}.formSection h3{font-size:15px;margin:0 0 10px;color:#102a43}.formGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.formHint{grid-column:1/-1;color:#52606d;font-size:12px}.actionRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.actionRow form{display:block}.actionRow button{min-width:170px}.statusLine{border:1px solid #d9e2ec;border-radius:6px;padding:10px;background:#f8fafc;display:grid;gap:4px;color:#52606d}.statusLine strong{color:#102a43}.statusLine small{font-size:12px;color:#627d98}.deviceActions{padding-bottom:0}.onboardingPanel{border-color:#0b7285;background:#f8fcfd}.onboardingPanel .sectionHead h2{font-size:24px}");
+  html += F(".setupPanel{border-left:5px solid #0b7285}.setupForm{display:block}.formError{border:1px solid #f5c2c7;border-left:5px solid #c92a2a;background:#fff5f5;border-radius:7px;padding:10px;margin:0 0 12px;display:grid;gap:3px;color:#7f1d1d}.formError strong{color:#7f1d1d}.formSection{border-top:1px solid #d9e2ec;padding-top:14px;margin-top:14px}.formSection:first-of-type{border-top:0;padding-top:0}.formSection h3{font-size:15px;margin:0 0 10px;color:#102a43}.formGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.formHint{grid-column:1/-1;color:#52606d;font-size:12px}.actionRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.actionRow form{display:block}.actionRow button{min-width:170px}.statusLine{border:1px solid #d9e2ec;border-radius:6px;padding:10px;background:#f8fafc;display:grid;gap:4px;color:#52606d}.statusLine strong{color:#102a43}.statusLine small{font-size:12px;color:#627d98}.deviceActions{padding-bottom:0}.onboardingPanel{border-color:#0b7285;background:#f8fcfd}.onboardingPanel .sectionHead h2{font-size:24px}");
   html += F(".wifiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.wifiActions span{font-size:13px;color:#334e68}.wifiList{grid-column:1/-1;display:grid;gap:6px}.wifiNet{display:flex;justify-content:space-between;gap:10px;border:1px solid #d9e2ec;border-radius:6px;padding:8px;background:#f8fafc;cursor:pointer}.wifiNet small{color:#52606d}");
   html += F(".bars{height:180px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden;background:linear-gradient(to top,#f8fafc,#fff)}");
   html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px;font-style:normal}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0}.barwrap:nth-child(2n) .bar{background:#147d64}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
@@ -1280,7 +1384,7 @@ void AppWebServer::sendHtml(const String& body) {
 
   html += F("</main><script>");
   html += F("function byId(i){return document.getElementById(i)}function txt(i,v){const e=byId(i);if(e)e.textContent=v}function title(i,v){const e=byId(i);if(e)e.title=v||''}function pill(i,c){const e=byId(i);if(e)e.className='statusPill '+c}function chip(i,c,t){const e=byId(i);if(e){e.className='chip '+c;e.textContent=t}}function rssiClass(v,p){if(!p)return'statusAlarm';if(v===null||v===undefined)return'statusOff';if(v>=-85)return'statusOk';if(v>=-100)return'statusWarn';return'statusAlarm'}function fmt(v){return Number(v||0).toFixed(3)}function liters(v){return Math.round((Number(v)||0)*1000)}function literLabel(v){const l=liters(v);return l?l+' L':'- L'}function refreshMinuteGraph(values){if(!values||!byId('minuteBars'))return;let buckets=new Array(30).fill(0),total=0,max=0;values.forEach((v,idx)=>{v=Number(v)||0;total+=v;const age=59-idx,b=Math.floor(age/2);if(b>=0&&b<30)buckets[b]+=v});buckets.forEach(v=>{if(v>max)max=v});txt('minuteTotal',liters(total)+' L');txt('minutePeak',liters(max)+' L/2 min');buckets.forEach((v,age)=>{const b=document.querySelector('[data-minute-bar=\"'+age+'\"]');if(!b)return;b.style.height=(!v||!max)?'0%':Math.max(3,Math.round(v*100/max))+'%';const w=b.parentElement;w.title=(age?'-'+(age*2):'now')+': '+literLabel(v);const l=w.querySelector('.minuteLiters');if(l)l.textContent=literLabel(v)})}");
-  html += F("async function refreshData(){if(!byId('topFrameText'))return;try{const j=await (await fetch('/data.json',{cache:'no-store'})).json();const age=j.last_frame_age_s;const live=j.valid&&age<90;const radioOk=j.radio_present&&j.radio_started;const a=j.alarms||{};const alarm=a.burst||a.leak;const warn=a.dry||a.reverse;pill('topFramePill',!radioOk?'statusAlarm':(live?'statusOk':(j.valid?'statusWarn':'statusOff')));title('topFramePill',j.radio_status);txt('topFrameText','RX');pill('topSignalPill',rssiClass(j.radio_rssi_dbm,j.radio_present));title('topSignalPill',j.radio_present?'Last accepted meter signal strength':'CC1101 not detected');txt('topSignalText',j.radio_rssi_dbm===null?'--dBm':j.radio_rssi_dbm+'dBm');pill('topDataPill',!j.valid?'statusOff':(alarm?'statusAlarm':(warn?'statusWarn':'statusOk')));txt('topDataText','Alarm');pill('topTimePill',j.time_synced?'statusOk':(j.ntp_enabled?'statusWarn':'statusOff'));txt('topTimeText','NTP');txt('ntpStatusValue',!j.ntp_enabled?'Disabled':(j.time_synced?'Synced':'Waiting'));txt('ntpStatusHint',!j.ntp_enabled?'NTP disabled':(j.time_synced?'Epoch '+j.time_epoch:(j.wifi_connected?'Retrying '+(j.ntp_server||'pool.ntp.org')+' every 30 seconds':'Waiting for WiFi')));txt('heroText',j.radio_status||'Waiting for radio status.');txt('heroRxAge',j.valid?age+' s':'--');txt('waterTotal',j.valid?Number(j.total_m3).toFixed(3):'--');txt('monthUsage',j.valid?Number(j.month_usage_m3).toFixed(3)+' m3':'-');chip('waterChip',j.valid?'ok':'warn',j.valid?'Live':'Waiting');chip('temperatureChip',j.valid?'ok':'warn',j.valid?'Live':'Waiting');txt('hourlyUsage',fmt(j.current_hour_m3));txt('todayUsage',fmt(j.today_m3));txt('weeklyUsage',fmt(j.current_week_m3));txt('waterTemp',j.valid?j.water_temperature_c+' \\u00b0C':'--');txt('roomTemp',j.valid?j.ambient_temperature_c+' \\u00b0C':'--');refreshMinuteGraph(j.minute_values_m3)}catch(e){}}setInterval(refreshData,5000);refreshData();");
+  html += F("async function refreshData(){if(!byId('topFrameText'))return;try{const j=await (await fetch('/data.json',{cache:'no-store'})).json();const age=j.last_frame_age_s;const live=j.valid&&age<90;const radioOk=j.radio_present&&j.radio_started;const a=j.alarms||{};const alarm=a.burst||a.leak;const warn=a.dry||a.reverse;pill('topFramePill',!radioOk?'statusAlarm':(live?'statusOk':(j.valid?'statusWarn':'statusOff')));title('topFramePill',j.radio_status);txt('topFrameText','RX');pill('topSignalPill',rssiClass(j.radio_rssi_dbm,j.radio_present));title('topSignalPill',j.radio_present?'Last accepted meter signal strength':'CC1101 not detected');txt('topSignalText',j.radio_rssi_dbm===null?'--dBm':j.radio_rssi_dbm+'dBm');pill('topDataPill',!j.valid?'statusOff':(alarm?'statusAlarm':(warn?'statusWarn':'statusOk')));txt('topDataText','Alarm');pill('topTimePill',j.time_synced?'statusOk':(j.ntp_enabled?'statusWarn':'statusOff'));txt('topTimeText','NTP');txt('ntpStatusValue',!j.ntp_enabled?'Disabled':(j.time_synced?'Synced':'Waiting'));let ntpHint='NTP disabled';if(j.ntp_enabled){ntpHint=j.time_synced?'Epoch '+j.time_epoch+', synced '+(j.ntp_last_sync_age_s===null?'now':j.ntp_last_sync_age_s+' s ago'):(j.wifi_connected?'Last attempt '+(j.ntp_last_attempt_age_s===null?'never':j.ntp_last_attempt_age_s+' s ago')+', attempts '+(j.ntp_attempts||0):'Waiting for WiFi')}txt('ntpStatusHint',ntpHint);txt('heroText',j.radio_status||'Waiting for radio status.');txt('heroRxAge',j.valid?age+' s':'--');txt('waterTotal',j.valid?Number(j.total_m3).toFixed(3):'--');txt('monthUsage',j.valid?Number(j.month_usage_m3).toFixed(3)+' m3':'-');chip('waterChip',j.valid?'ok':'warn',j.valid?'Live':'Waiting');chip('temperatureChip',j.valid?'ok':'warn',j.valid?'Live':'Waiting');txt('hourlyUsage',fmt(j.current_hour_m3));txt('todayUsage',fmt(j.today_m3));txt('weeklyUsage',fmt(j.current_week_m3));txt('waterTemp',j.valid?j.water_temperature_c+' \\u00b0C':'--');txt('roomTemp',j.valid?j.ambient_temperature_c+' \\u00b0C':'--');refreshMinuteGraph(j.minute_values_m3)}catch(e){}}setInterval(refreshData,5000);refreshData();");
   html += F("async function scanWifi(){const r=document.getElementById('wifiResult'),l=document.getElementById('wifiList');r.textContent='Scanning...';l.innerHTML='';try{const j=await (await fetch('/wifiscan.json')).json();r.textContent=j.networks.length+' networks';j.networks.forEach(n=>{const d=document.createElement('div');d.className='wifiNet';d.innerHTML='<strong></strong><small></small>';d.querySelector('strong').textContent=n.ssid||'(hidden)';d.querySelector('small').textContent=n.rssi+' dBm ch '+n.channel+(n.secure?' secure':' open');d.onclick=()=>{document.getElementById('wifiSsid').value=n.ssid};l.appendChild(d)})}catch(e){r.textContent='Scan failed'}}");
   html += F("async function testWifi(){const r=document.getElementById('wifiResult');r.textContent='Testing...';const body=new URLSearchParams({ssid:document.getElementById('wifiSsid').value,password:document.getElementById('wifiPassword').value});try{const j=await (await fetch('/wifitest.json',{method:'POST',body})).json();r.textContent=j.ok?'Connected: '+j.ip:'Failed, status '+j.status}catch(e){r.textContent='Test failed'}}");
   html += F("</script></body></html>");

@@ -127,6 +127,8 @@ static void setupNtp() {
   const char* primaryServer = strlen(appConfig.data().ntpServer) > 0 ? appConfig.data().ntpServer : "pool.ntp.org";
   configTime(0, 0, primaryServer, "pool.ntp.org", "time.google.com");
   lastNtpAttempt = millis();
+  waterData.ntpLastAttemptMillis = lastNtpAttempt;
+  waterData.ntpAttemptCount++;
   ntpConfigured = true;
   Debug.print("NTP configured: ");
   Debug.println(primaryServer);
@@ -153,6 +155,8 @@ static void loopNtp() {
 
   if (!ntpSyncLogged && isNtpSynced()) {
     ntpSyncLogged = true;
+    waterData.ntpLastSyncMillis = millis();
+    waterData.ntpLastSyncEpoch = (uint32_t) time(nullptr);
     Debug.print("NTP synced: ");
     Debug.println(appConfig.data().ntpServer);
   }
