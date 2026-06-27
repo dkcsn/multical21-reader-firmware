@@ -41,7 +41,19 @@ jobs:
             printf '#define FW_BUILD_DATE "%s"\n' "${BUILD_DATE}"
           } > include/FirmwareBuildOverrides.h
 
-          platformio run -e esp8266_lite -e lolin_s2_mini
+          set +e
+          platformio run -e esp8266_lite -e lolin_s2_mini 2>&1 | tee build.log
+          BUILD_STATUS="${PIPESTATUS[0]}"
+          set -e
+          if [ "${BUILD_STATUS}" -ne 0 ]; then
+            {
+              echo "PlatformIO build failed. Last 80 log lines:"
+              tail -n 80 build.log
+            } > build-error.txt
+            MESSAGE="$(sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' build-error.txt)"
+            echo "::error title=PlatformIO build failed::${MESSAGE}"
+            exit "${BUILD_STATUS}"
+          fi
 
           mkdir -p dist
           cp .pio/build/esp8266_lite/firmware.bin "dist/multical21-reader-${VERSION}-esp8266-lite.bin"
