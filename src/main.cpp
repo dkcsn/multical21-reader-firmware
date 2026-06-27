@@ -180,12 +180,18 @@ static bool connectWifi() {
 
 static void startSetupAp() {
   setupApMode = true;
+  WiFi.disconnect(true);
+  delay(100);
   WiFi.mode(WIFI_AP);
   applyWifiHostname();
   String apName = setupApName();
-  WiFi.softAP(apName.c_str());
+  IPAddress apIp(192, 168, 4, 1);
+  IPAddress gateway(192, 168, 4, 1);
+  IPAddress subnet(255, 255, 255, 0);
+  WiFi.softAPConfig(apIp, gateway, subnet);
+  bool apStarted = WiFi.softAP(apName.c_str(), nullptr, 6, false, 4);
   dnsServer.start(53, "*", WiFi.softAPIP());
-  Debug.print("Setup AP started: ");
+  Debug.print(apStarted ? "Setup AP started: " : "Setup AP start failed: ");
   Debug.print(apName);
   Debug.print(" at ");
   Debug.println(WiFi.softAPIP().toString());
