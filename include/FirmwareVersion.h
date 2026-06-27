@@ -3,6 +3,12 @@
 
 #include <Arduino.h>
 
+#if defined(__has_include)
+  #if __has_include("FirmwareBuildOverrides.h")
+    #include "FirmwareBuildOverrides.h"
+  #endif
+#endif
+
 #ifndef FW_VERSION
   #define FW_VERSION "1.1.4"
 #endif

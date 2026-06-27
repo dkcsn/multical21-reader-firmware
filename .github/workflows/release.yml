@@ -34,7 +34,13 @@ jobs:
           SHORT_SHA="${GITHUB_SHA::7}"
           BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 
-          export PLATFORMIO_BUILD_FLAGS="-D FW_VERSION=\\\"${VERSION}\\\" -D FW_GIT_SHA=\\\"${SHORT_SHA}\\\" -D FW_BUILD_DATE=\\\"${BUILD_DATE}\\\""
+          {
+            printf '#pragma once\n'
+            printf '#define FW_VERSION "%s"\n' "${VERSION}"
+            printf '#define FW_GIT_SHA "%s"\n' "${SHORT_SHA}"
+            printf '#define FW_BUILD_DATE "%s"\n' "${BUILD_DATE}"
+          } > include/FirmwareBuildOverrides.h
+
           platformio run -e esp8266_lite -e lolin_s2_mini
 
           mkdir -p dist
