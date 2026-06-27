@@ -526,7 +526,7 @@ static String buildSetupSection(AppConfig& config, bool onboardingMode) {
   out += cfg.homeAssistantDiscovery ? F(" selected") : F("");
   out += F(">Enabled</option><option value=\"0\"");
   out += !cfg.homeAssistantDiscovery ? F(" selected") : F("");
-  out += F(">Disabled</option></select></label>");
+  out += F(">Disabled</option></select><small>Publishes MQTT discovery messages so Home Assistant can create water meter sensors automatically.</small></label>");
   out += F("<label>HA discovery prefix<input name=\"homeAssistantPrefix\" value=\"");
   out += htmlEscape(cfg.homeAssistantPrefix);
   out += F("\"></label></div></div>");
