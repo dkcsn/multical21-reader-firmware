@@ -431,6 +431,16 @@ static String graphTab(char period, char selected, const char* label) {
   return out;
 }
 
+static String setupTabs(bool hardwareActive) {
+  String out;
+  out += F("<div class=\"tabs setupTabs\"><a class=\"tab");
+  out += hardwareActive ? F("") : F(" active");
+  out += F("\" href=\"/setup\">Settings</a><a class=\"tab");
+  out += hardwareActive ? F(" active") : F("");
+  out += F("\" href=\"/hardware\">Hardware</a></div>");
+  return out;
+}
+
 static bool isOpenNetwork(uint8_t index) {
 #if defined(ESP8266)
   return WiFi.encryptionType(index) == ENC_TYPE_NONE;
@@ -449,7 +459,9 @@ static String buildSetupSection(AppConfig& config, bool onboardingMode) {
   out += onboardingMode ? F("WiFi onboarding") : F("Setup");
   out += F("</h2><span>");
   out += onboardingMode ? F("Setup AP") : F("Settings");
-  out += F("</span></div><form class=\"setupForm\" method=\"post\" action=\"/save\">");
+  out += F("</span></div>");
+  out += setupTabs(false);
+  out += F("<form class=\"setupForm\" method=\"post\" action=\"/save\">");
   out += F("<div class=\"formSection\"><h3>WiFi</h3><div class=\"formGrid\"><label>Device name<input name=\"deviceName\" value=\"");
   out += htmlEscape(config.deviceName());
   out += F("\" maxlength=\"32\"></label>");
@@ -666,8 +678,9 @@ void AppWebServer::handleGraphsPage() {
 
 void AppWebServer::handleHardwarePage() {
   String body;
-  body.reserve(3600);
+  body.reserve(4300);
   body += F("<section><div class=\"sectionHead\"><h2>Advanced hardware</h2><span>CC1101 wiring</span></div>");
+  body += setupTabs(true);
   body += F("<dl><dt>Board profile</dt><dd>");
   body += htmlEscape(hardwareBoardProfile());
   body += F("</dd><dt>Firmware board</dt><dd>");
@@ -705,6 +718,10 @@ void AppWebServer::handleHardwarePage() {
   body += wiringRow("CSN", "SPI chip select", pinLabel(SS), "");
 #endif
   body += F("</tbody></table></section>");
+
+  body += F("<section><div class=\"sectionHead\"><h2>CC1101 module pinout</h2><span>Module view</span></div>");
+  body += F("<div class=\"ccModule\"><div class=\"ccPins\"><span>VCC</span><span>GND</span><span>MOSI</span><span>SCLK</span><span>MISO</span><span>GDO2</span><span>GDO0</span><span>CSN</span></div><div class=\"ccBoard\"><strong>CC1101<br>868 MHz</strong></div></div>");
+  body += F("<p class=\"hint\">Pin order matches the CC1101 module picture: power pins at the top, CSN at the bottom.</p></section>");
 
   body += F("<section><div class=\"sectionHead\"><h2>Soldering diagram</h2><span>Expected wiring</span></div>");
   body += F("<div class=\"wireDiagram\"><div><h3>CC1101</h3><code>VCC<br>GND<br>MOSI<br>SCLK<br>MISO<br>GDO2<br>GDO0<br>CSN</code></div>");
@@ -1157,6 +1174,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px;font-style:normal}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0}.barwrap:nth-child(2n) .bar{background:#147d64}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
   html += F(".minutePanel{padding-bottom:12px}.minuteBars{height:176px;display:grid;grid-template-columns:repeat(30,1fr);gap:3px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden;background:linear-gradient(to top,#f8fafc,#fff)}.minuteWrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:9px;font-style:normal}.minuteBar{align-self:end;background:#0b7285;border-radius:3px 3px 0 0;min-height:0}.minuteWrap:nth-child(2n) .minuteBar{background:#147d64}.minuteWrap span{white-space:nowrap;overflow:hidden;text-overflow:clip}.minuteLiters{font-weight:700;color:#102a43}.minuteAge{color:#52606d}");
   html += F(".pinTable{width:100%;border-collapse:collapse}.pinTable th,.pinTable td{border-bottom:1px solid #d9e2ec;text-align:left;padding:9px;font-size:13px}.pinTable th{color:#52606d;text-transform:uppercase;font-size:11px}.wireDiagram{display:grid;grid-template-columns:max-content max-content max-content;gap:16px;align-items:start;overflow:auto}.wireDiagram h3{font-size:14px;margin:0 0 8px;color:#102a43}.wireDiagram code{display:block;line-height:1.8;background:#f8fafc;border:1px solid #d9e2ec;border-radius:6px;padding:10px;white-space:nowrap}.wireLines{display:grid;gap:0;margin-top:28px;color:#0b7285;font-weight:900;line-height:1.8}");
+  html += F(".setupTabs{margin:-2px 0 14px}.ccModule{display:grid;grid-template-columns:max-content 220px;gap:12px;align-items:stretch;overflow:auto}.ccPins{display:grid;grid-template-rows:repeat(8,1fr);gap:4px}.ccPins span{min-width:68px;padding:6px 8px;background:#f8fafc;border:1px solid #d9e2ec;border-radius:5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800}.ccBoard{border:2px solid #147d64;background:#e6fcf5;border-radius:6px;display:grid;place-items:center;text-align:center;color:#0b7285;min-height:260px}.ccBoard strong{font-size:22px;line-height:1.35}");
   html += F("@media(max-width:1200px){.cards{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}}@media(max-width:980px){header{grid-template-columns:1fr}.statusGroup,.navLinks{justify-content:flex-start;flex-wrap:wrap}.statusGroup{overflow:visible}.navLinks{border-left:0;padding-left:0;border-top:1px solid #486581;padding-top:8px}}@media(max-width:640px){main{padding:12px}.hero{grid-template-columns:1fr}.hero h2{font-size:24px}dl{grid-template-columns:1fr}.heroMeter strong{font-size:30px}nav a span{display:none}.statusPill{min-width:62px}}");
   html += F("</style></head><body><header><h1>Multical 21 Reader</h1><nav class=\"topRight\"><div class=\"statusGroup\">");
   html += F("<span id=\"topFramePill\" class=\"statusPill ");
@@ -1195,7 +1213,6 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("<a href=\"/\" title=\"Dashboard\"><svg viewBox=\"0 0 24 24\"><path d=\"M3 12l9-9 9 9\"></path><path d=\"M5 10v10h14V10\"></path></svg><span>Dashboard</span></a>");
   html += F("<a href=\"/setup\" title=\"Setup\"><svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"3\"></circle><path d=\"M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.1 2.1-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V20h-3v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-2.1-2.1.1-.1A1.7 1.7 0 0 0 5 15a1.7 1.7 0 0 0-1.5-1H3v-3h.5A1.7 1.7 0 0 0 5 10a1.7 1.7 0 0 0-.3-1.9l-.1-.1 2.1-2.1.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V4h3v.8a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 2.1 2.1-.1.1A1.7 1.7 0 0 0 19 10a1.7 1.7 0 0 0 1.5 1h.5v3h-.5a1.7 1.7 0 0 0-1.1 1z\"></path></svg><span>Setup</span></a>");
   html += F("<a href=\"/graphs\" title=\"Graphs\"><svg viewBox=\"0 0 24 24\"><path d=\"M4 19V5\"></path><path d=\"M4 19h16\"></path><path d=\"M8 16v-4\"></path><path d=\"M12 16V8\"></path><path d=\"M16 16v-6\"></path></svg><span>Graphs</span></a>");
-  html += F("<a href=\"/hardware\" title=\"Hardware\"><svg viewBox=\"0 0 24 24\"><rect x=\"7\" y=\"7\" width=\"10\" height=\"10\" rx=\"1\"></rect><path d=\"M4 10h3M4 14h3M17 10h3M17 14h3M10 4v3M14 4v3M10 17v3M14 17v3\"></path></svg><span>Hardware</span></a>");
   html += F("<a href=\"/firmware\" title=\"Firmware\"><svg viewBox=\"0 0 24 24\"><path d=\"M12 3v12\"></path><path d=\"M8 7l4-4 4 4\"></path><path d=\"M5 15v4h14v-4\"></path></svg><span>FW ");
   html += htmlEscape(firmwareVersion());
   html += F("</span></a>");
