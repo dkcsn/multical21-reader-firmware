@@ -22,6 +22,8 @@ struct WaterData {
   uint8_t radioPartnum = 0;
   uint8_t radioVersion = 0;
   char radioStatus[64] = "Radio not started";
+  char lastRejectedFrame[64] = "None";
+  unsigned long lastRejectedFrameMillis = 0;
   WaterAlarms alarms;
   unsigned long lastFrameMillis = 0;
   bool valid = false;

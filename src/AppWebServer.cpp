@@ -701,12 +701,16 @@ void AppWebServer::handleHardwarePage() {
   body += F("</dd></dl></section>");
 
   const uint32_t lastFrameAgeSeconds = waterData.valid ? (millis() - waterData.lastFrameMillis) / 1000 : 0;
+  const uint32_t lastRejectAgeSeconds = waterData.lastRejectedFrameMillis > 0 ? (millis() - waterData.lastRejectedFrameMillis) / 1000 : 0;
   body += F("<section><div class=\"sectionHead\"><h2>Radio diagnostics</h2><span>Live status</span></div><dl>");
   body += F("<dt>CC1101</dt><dd>");
   body += waterData.radioPresent ? F("Detected") : F("Not detected");
   body += waterData.radioStarted ? F(" / receiver running") : F(" / receiver stopped");
   body += F("</dd><dt>Runtime status</dt><dd>");
   body += htmlEscape(radioStatusText(waterData, config.hasMeter()));
+  body += F("</dd><dt>Radio profile</dt><dd>Known good ");
+  body += hexByte(CC1101_DEFVAL_IOCFG0);
+  body += F(" / falling edge, polling-assisted RX");
   body += F("</dd><dt>Chip identity</dt><dd>");
   if (waterData.radioPresent) {
     body += F("PARTNUM ");
@@ -718,9 +722,7 @@ void AppWebServer::handleHardwarePage() {
   }
   body += F("</dd><dt>GDO0 pin</dt><dd>");
   body += pinLabel(CC1101_GDO0);
-  body += F("</dd><dt>GDO0 mode</dt><dd>");
-  body += hexByte(CC1101_DEFVAL_IOCFG0);
-  body += F(" / falling edge, RX polling fallback enabled</dd><dt>Last accepted signal</dt><dd>");
+  body += F("</dd><dt>Last accepted signal</dt><dd>");
   if (waterData.radioRssiValid) {
     body += String(waterData.radioRssiDbm);
     body += F(" dBm");
@@ -734,7 +736,16 @@ void AppWebServer::handleHardwarePage() {
   } else {
     body += F("None yet");
   }
-  body += F("</dd></dl><p class=\"hint\">Polling fallback is expected on these builds and is kept because it reliably catches complete Multical 21 frames when the GDO0 interrupt edge is missed.</p></section>");
+  body += F("</dd><dt>Last rejected frame</dt><dd>");
+  if (waterData.lastRejectedFrameMillis > 0) {
+    body += htmlEscape(waterData.lastRejectedFrame);
+    body += F(" / ");
+    body += String(lastRejectAgeSeconds);
+    body += F(" s ago");
+  } else {
+    body += F("None yet");
+  }
+  body += F("</dd></dl><p class=\"hint\">Polling-assisted RX is the known good profile for these builds. It is kept because it reliably catches complete Multical 21 frames.</p></section>");
 
   body += F("<section><div class=\"sectionHead\"><h2>Active pin map</h2><span>Read only</span></div>");
   body += F("<table class=\"pinTable\"><thead><tr><th>CC1101 pin</th><th>Signal</th><th>Board pin</th><th>Wire</th><th>Note</th></tr></thead><tbody>");

@@ -35,6 +35,13 @@ static void setRadioStatus(WaterData& waterData, const char* status)
   waterData.radioStatus[sizeof(waterData.radioStatus) - 1] = '\0';
 }
 
+static void setLastRejectedFrame(WaterData& waterData, const char* reason)
+{
+  strncpy(waterData.lastRejectedFrame, reason, sizeof(waterData.lastRejectedFrame) - 1);
+  waterData.lastRejectedFrame[sizeof(waterData.lastRejectedFrame) - 1] = '\0';
+  waterData.lastRejectedFrameMillis = millis();
+}
+
 static bool cc1101VersionLooksValid(uint8_t version)
 {
   return version != 0x00 && version != 0xFF;
@@ -441,6 +448,7 @@ void WaterMeter::receive(WMBusFrame * frame, WaterData& waterData)
 
   if (fifoBytes < 3) {
     Debug.println("WMBus rejected before decode: RX FIFO too short");
+    setLastRejectedFrame(waterData, "RX FIFO too short");
     startReceiver();
     return;
   }
@@ -454,6 +462,7 @@ void WaterMeter::receive(WMBusFrame * frame, WaterData& waterData)
   int syncOffset = findWmbusSync(raw, fifoBytes);
   if (syncOffset < 0) {
     Debug.println("WMBus rejected before decode: sync 0x543D not found in FIFO");
+    setLastRejectedFrame(waterData, "sync 0x543D not found");
     startReceiver();
     return;
   }
@@ -468,6 +477,7 @@ void WaterMeter::receive(WMBusFrame * frame, WaterData& waterData)
 
   if (payloadLength >= WMBusFrame::MAX_LENGTH) {
     Debug.println("WMBus rejected before decode: payload too long");
+    setLastRejectedFrame(waterData, "payload too long");
     startReceiver();
     return;
   }
@@ -475,6 +485,7 @@ void WaterMeter::receive(WMBusFrame * frame, WaterData& waterData)
   if ((uint16_t) syncOffset + 3 + payloadLength > fifoBytes) {
     Debug.printf("WMBus rejected before decode: incomplete FIFO frame need %u bytes got %u\n\r",
                  (unsigned) (syncOffset + 3 + payloadLength), fifoBytes);
+    setLastRejectedFrame(waterData, "incomplete FIFO frame");
     startReceiver();
     return;
   }
@@ -486,6 +497,8 @@ void WaterMeter::receive(WMBusFrame * frame, WaterData& waterData)
   if (frame->isValid) {
     waterData.radioRssiDbm = frameRssiDbm;
     waterData.radioRssiValid = true;
+  } else {
+    setLastRejectedFrame(waterData, "decode/check failed");
   }
 
   // flush RX fifo and restart receiver
