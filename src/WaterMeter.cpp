@@ -201,7 +201,7 @@ void WaterMeter::restartRadio(void)
   packetAvailable = false;
   startReceiver();
   lastHealthCheckMillis = millis();
-  attachInterrupt(digitalPinToInterrupt(CC1101_GDO0), GD0_ISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(CC1101_GDO0), GD0_ISR, RISING);
 }
 
 void WaterMeter::checkRadioHealth(WaterData& waterData)
@@ -372,7 +372,7 @@ bool WaterMeter::readFrame(WaterData& waterData, const AppConfigData& config)
     receive(&frame, waterData);
 
     // Enable wireless reception interrupt
-    attachInterrupt(digitalPinToInterrupt(CC1101_GDO0), GD0_ISR, FALLING);
+    attachInterrupt(digitalPinToInterrupt(CC1101_GDO0), GD0_ISR, RISING);
     if (frame.isValid) {
       lastFrameReceivedMillis = millis();
       Debug.println("WMBus frame accepted");
@@ -392,6 +392,7 @@ bool WaterMeter::begin(WaterData& waterData)
   pinMode(CC1101_GDO0, INPUT);          // Config GDO0 as input
   Debug.printf("CC1101 pins: CSN GPIO%d, MOSI GPIO%d, MISO GPIO%d, SCK GPIO%d, GDO0 GPIO%d\n\r",
                SS, MOSI, MISO, SCK, CC1101_GDO0);
+  Debug.printf("CC1101 GDO0 mode 0x%02X, interrupt edge RISING\n\r", CC1101_DEFVAL_IOCFG0);
 
   reset();                              // power on CC1101
   if (!detectRadio(waterData)) {
@@ -406,7 +407,7 @@ bool WaterMeter::begin(WaterData& waterData)
   delay(1);
   logRadioIdentity();
 
-  attachInterrupt(digitalPinToInterrupt(CC1101_GDO0), GD0_ISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(CC1101_GDO0), GD0_ISR, RISING);
   startReceiver();
   lastHealthCheckMillis = millis();
   lastFrameReceivedMillis = millis();
