@@ -27,11 +27,14 @@
 
 // attach CC1101 pins to ESP32 SPI pins
 
-  #define CC1101_GDO0          32
   #define FORCE_SETUP_PIN      0   // BOOT button, active low
 #if defined(BOARD_LOLIN_S2_MINI)
+  // LOLIN S2 Mini SPI pins are SS=12, MOSI=11, MISO=9, SCK=7.
+  // The CC1101 GDO0 interrupt is wired to GPIO13 in this build.
+  #define CC1101_GDO0          13
   #define PIN_LED_BUILTIN      15
 #else
+  #define CC1101_GDO0          32
   #define PIN_LED_BUILTIN      2
 #endif
 #endif
