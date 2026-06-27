@@ -57,20 +57,6 @@ bool haDiscoveryPublished = false;
 bool ntpConfigured = false;
 bool ntpSyncLogged = false;
 
-#if defined(ESP32)
-static void configureEsp32WifiRadio() {
-  wifi_country_t country = {
-    .cc = "DK",
-    .schan = 1,
-    .nchan = 13,
-    .policy = WIFI_COUNTRY_POLICY_MANUAL
-  };
-  esp_wifi_set_country(&country);
-  esp_wifi_set_ps(WIFI_PS_NONE);
-  esp_wifi_set_max_tx_power(78);
-}
-#endif
-
 static String chipIdHex() {
 #if defined(ESP32)
   uint64_t mac = ESP.getEfuseMac();
@@ -191,25 +177,17 @@ static bool connectWifi() {
 
 static void startSetupAp() {
   setupApMode = true;
-  WiFi.disconnect(true);
-  delay(100);
-  WiFi.mode(WIFI_AP_STA);
+  WiFi.mode(WIFI_AP);
   WiFi.setSleep(false);
-#if defined(ESP32)
-  configureEsp32WifiRadio();
-#endif
   applyWifiHostname();
   String apName = setupApName();
   IPAddress apIp(192, 168, 4, 1);
   IPAddress gateway(192, 168, 4, 1);
   IPAddress subnet(255, 255, 255, 0);
   WiFi.softAPConfig(apIp, gateway, subnet);
-#if defined(BOARD_LOLIN_S2_MINI)
-  const char* apPassword = "multical21";
-#else
   const char* apPassword = nullptr;
-#endif
-  bool apStarted = WiFi.softAP(apName.c_str(), apPassword, 1, false, 4);
+  bool apStarted = WiFi.softAP(apName.c_str(), apPassword, 6, false, 4);
+  delay(1000);
   dnsServer.start(53, "*", WiFi.softAPIP());
   Debug.print(apStarted ? "Setup AP started: " : "Setup AP start failed: ");
   Debug.print(apName);
