@@ -406,6 +406,7 @@ static bool isOpenNetwork(uint8_t index) {
 
 static String buildSetupSection(AppConfig& config, bool onboardingMode) {
   const AppConfigData& cfg = config.data();
+  const String deviceIp = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
   String out;
   out += F("<section id=\"setup\" class=\"setupPanel");
   out += onboardingMode ? F(" onboardingPanel") : F("");
@@ -425,7 +426,9 @@ static String buildSetupSection(AppConfig& config, bool onboardingMode) {
   out += F("\"></label>");
   out += F("<div class=\"statusLine\"><span>Local address</span><strong>http://");
   out += htmlEscape(config.deviceName());
-  out += F(".local</strong><small>Reboot after save to apply hostname and mDNS changes</small></div>");
+  out += F(".local</strong><small>IP address: ");
+  out += htmlEscape(deviceIp);
+  out += F("</small><small>Reboot after save to apply hostname and mDNS changes</small></div>");
   out += F("</div><div class=\"wifiActions\"><button type=\"button\" onclick=\"scanWifi()\">Scan WiFi</button><button type=\"button\" onclick=\"testWifi()\">Test WiFi</button><span id=\"wifiResult\"></span></div><div id=\"wifiList\" class=\"wifiList\"></div></div>");
   out += F("<div class=\"formSection\"><h3>Time</h3><div class=\"formGrid\"><label>NTP enabled<select name=\"ntpEnabled\"><option value=\"1\"");
   out += cfg.ntpEnabled ? F(" selected") : F("");
