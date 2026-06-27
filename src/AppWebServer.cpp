@@ -535,7 +535,9 @@ static String buildSetupSection(AppConfig& config, bool onboardingMode) {
   out += cfg.telnetDebugEnabled ? F(" selected") : F("");
   out += F(">Enabled</option><option value=\"0\"");
   out += !cfg.telnetDebugEnabled ? F(" selected") : F("");
-  out += F(">Disabled</option></select><small>Applies immediately after Save. Connect to port 23.</small></label></div></div>");
+  out += F(">Disabled</option></select><small>Applies immediately after Save. Connect with: nc ");
+  out += htmlEscape(deviceIp);
+  out += F(" 23</small></label></div></div>");
   out += F("<div class=\"formSection\"><h3>Meter</h3><div class=\"formGrid\"><label>Meter serial hex<input name=\"meterSerial\" value=\"");
   out += htmlEscape(config.meterSerialHex());
   out += F("\" maxlength=\"8\"></label>");
