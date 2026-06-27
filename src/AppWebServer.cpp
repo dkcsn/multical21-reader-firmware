@@ -1,5 +1,6 @@
 #include "AppWebServer.h"
 #include "FirmwareVersion.h"
+#include "WaterMeter.h"
 #include "hwconfig.h"
 
 #if defined(ESP8266)
@@ -40,11 +41,15 @@ static String jsonEscape(const String& value) {
   return out;
 }
 
-#if defined(ESP32)
+static String hexByte(uint8_t value) {
+  char buffer[5];
+  snprintf(buffer, sizeof(buffer), "0x%02X", value);
+  return String(buffer);
+}
+
 static String pinLabel(int pin) {
   return String("GPIO") + String(pin);
 }
-#endif
 
 static String hardwareBoardProfile() {
 #if defined(BOARD_LOLIN_S2_MINI)
@@ -682,7 +687,7 @@ void AppWebServer::handleGraphsPage() {
 
 void AppWebServer::handleHardwarePage() {
   String body;
-  body.reserve(4300);
+  body.reserve(5200);
   body += F("<section><div class=\"sectionHead\"><h2>Advanced hardware</h2><span>CC1101 wiring</span></div>");
   body += setupTabs(true);
   body += F("<dl><dt>Board profile</dt><dd>");
@@ -690,6 +695,42 @@ void AppWebServer::handleHardwarePage() {
   body += F("</dd><dt>Firmware board</dt><dd>");
   body += htmlEscape(firmwareBoardName());
   body += F("</dd></dl></section>");
+
+  const uint32_t lastFrameAgeSeconds = waterData.valid ? (millis() - waterData.lastFrameMillis) / 1000 : 0;
+  body += F("<section><div class=\"sectionHead\"><h2>Radio diagnostics</h2><span>Live status</span></div><dl>");
+  body += F("<dt>CC1101</dt><dd>");
+  body += waterData.radioPresent ? F("Detected") : F("Not detected");
+  body += waterData.radioStarted ? F(" / receiver running") : F(" / receiver stopped");
+  body += F("</dd><dt>Runtime status</dt><dd>");
+  body += htmlEscape(radioStatusText(waterData, config.hasMeter()));
+  body += F("</dd><dt>Chip identity</dt><dd>");
+  if (waterData.radioPresent) {
+    body += F("PARTNUM ");
+    body += hexByte(waterData.radioPartnum);
+    body += F(", VERSION ");
+    body += hexByte(waterData.radioVersion);
+  } else {
+    body += F("--");
+  }
+  body += F("</dd><dt>GDO0 pin</dt><dd>");
+  body += pinLabel(CC1101_GDO0);
+  body += F("</dd><dt>GDO0 mode</dt><dd>");
+  body += hexByte(CC1101_DEFVAL_IOCFG0);
+  body += F(" / falling edge, RX polling fallback enabled</dd><dt>Last accepted signal</dt><dd>");
+  if (waterData.radioRssiValid) {
+    body += String(waterData.radioRssiDbm);
+    body += F(" dBm");
+  } else {
+    body += F("--");
+  }
+  body += F("</dd><dt>Last valid frame</dt><dd>");
+  if (waterData.valid) {
+    body += String(lastFrameAgeSeconds);
+    body += F(" s ago");
+  } else {
+    body += F("None yet");
+  }
+  body += F("</dd></dl><p class=\"hint\">Polling fallback is expected on these builds and is kept because it reliably catches complete Multical 21 frames when the GDO0 interrupt edge is missed.</p></section>");
 
   body += F("<section><div class=\"sectionHead\"><h2>Active pin map</h2><span>Read only</span></div>");
   body += F("<table class=\"pinTable\"><thead><tr><th>CC1101 pin</th><th>Signal</th><th>Board pin</th><th>Wire</th><th>Note</th></tr></thead><tbody>");
