@@ -31,7 +31,7 @@
 #include "WaterMeter.h"
 #include "hwconfig.h"
 
-#if defined(ESP32)
+#if defined(ESP32) && !defined(LED_BUILTIN)
   #define LED_BUILTIN 4
 #endif
 
