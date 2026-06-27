@@ -342,9 +342,25 @@ bool WaterMeter::readFrame(WaterData& waterData, const AppConfigData& config)
 {
   checkRadioHealth(waterData);
 
-  if (packetAvailable)
+  uint8_t rxBytesNow = 0;
+  bool pollingFallback = false;
+  if (!packetAvailable) {
+    rxBytesNow = readReg(CC1101_RXBYTES, CC1101_STATUS_REGISTER);
+    const uint8_t fifoBytes = rxBytesNow & 0x7F;
+    pollingFallback = (rxBytesNow & 0x80) != 0 || fifoBytes >= 38;
+  }
+
+  if (packetAvailable || pollingFallback)
   {
-    Debug.println("CC1101 packet interrupt");
+    if (packetAvailable) {
+      Debug.println("CC1101 packet interrupt");
+    } else {
+      Debug.printf("CC1101 RX FIFO polling fallback: %u bytes%s, GDO0 GPIO%d level %u\n\r",
+                   rxBytesNow & 0x7F,
+                   (rxBytesNow & 0x80) != 0 ? " overflow" : "",
+                   CC1101_GDO0,
+                   digitalRead(CC1101_GDO0));
+    }
     // Disable wireless reception interrupt
     detachInterrupt(digitalPinToInterrupt(CC1101_GDO0));
  
@@ -374,6 +390,8 @@ bool WaterMeter::begin(WaterData& waterData)
   pinMode(SS, OUTPUT);	// SS Pin -> Output
   SPI.begin();                          // Initialize SPI interface
   pinMode(CC1101_GDO0, INPUT);          // Config GDO0 as input
+  Debug.printf("CC1101 pins: CSN GPIO%d, MOSI GPIO%d, MISO GPIO%d, SCK GPIO%d, GDO0 GPIO%d\n\r",
+               SS, MOSI, MISO, SCK, CC1101_GDO0);
 
   reset();                              // power on CC1101
   if (!detectRadio(waterData)) {
