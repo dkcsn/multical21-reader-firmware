@@ -27,7 +27,11 @@
 // attach CC1101 pins to ESP32 SPI pins
 
   #define CC1101_GDO0          32
+#if defined(BOARD_LOLIN_S2_MINI)
+  #define PIN_LED_BUILTIN      15
+#else
   #define PIN_LED_BUILTIN      2
+#endif
 #endif
 
 #endif //__HWCONFIG_H__

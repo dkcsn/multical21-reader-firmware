@@ -31,10 +31,6 @@
 #include "WaterMeter.h"
 #include "hwconfig.h"
 
-#if defined(ESP32) && !defined(LED_BUILTIN)
-  #define LED_BUILTIN 4
-#endif
-
 AppConfig appConfig;
 WaterData waterData;
 WaterHistory waterHistory;
@@ -170,7 +166,7 @@ static bool connectWifi() {
       Debug.println(WiFi.localIP().toString());
       return true;
     }
-    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+    digitalWrite(PIN_LED_BUILTIN, !digitalRead(PIN_LED_BUILTIN));
     delay(250);
     Debug.print(".");
   }
@@ -397,10 +393,16 @@ static void startRadioIfConfigured() {
 }
 
 void setup() {
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
+  pinMode(PIN_LED_BUILTIN, OUTPUT);
+  digitalWrite(PIN_LED_BUILTIN, HIGH);
 
   Serial.begin(115200);
+#if defined(BOARD_LOLIN_S2_MINI)
+  unsigned long serialWaitStarted = millis();
+  while (!Serial && millis() - serialWaitStarted < 2500) {
+    delay(10);
+  }
+#endif
   delay(100);
   Debug.println();
   Debug.println("Multical 21 Reader booting");
