@@ -14,6 +14,7 @@
   #include <WiFi.h>
   #include <ESPmDNS.h>
   #include <WiFiClientSecure.h>
+  #include <esp_wifi.h>
 #endif
 
 #include <ArduinoOTA.h>
@@ -179,18 +180,26 @@ static void startSetupAp() {
   WiFi.disconnect(true);
   delay(100);
   WiFi.mode(WIFI_AP);
+  WiFi.setSleep(false);
+#if defined(ESP32)
+  esp_wifi_set_max_tx_power(78);
+#endif
   applyWifiHostname();
   String apName = setupApName();
   IPAddress apIp(192, 168, 4, 1);
   IPAddress gateway(192, 168, 4, 1);
   IPAddress subnet(255, 255, 255, 0);
   WiFi.softAPConfig(apIp, gateway, subnet);
-  bool apStarted = WiFi.softAP(apName.c_str(), nullptr, 6, false, 4);
+  bool apStarted = WiFi.softAP(apName.c_str(), nullptr, 1, false, 4);
   dnsServer.start(53, "*", WiFi.softAPIP());
   Debug.print(apStarted ? "Setup AP started: " : "Setup AP start failed: ");
   Debug.print(apName);
   Debug.print(" at ");
-  Debug.println(WiFi.softAPIP().toString());
+  Debug.print(WiFi.softAPIP().toString());
+  Debug.print(" channel ");
+  Debug.print(WiFi.channel());
+  Debug.print(" mac ");
+  Debug.println(WiFi.softAPmacAddress());
 }
 
 static void setupOTA() {
