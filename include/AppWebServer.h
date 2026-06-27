@@ -31,6 +31,7 @@ private:
   void handleRoot();
   void handleSetupPage();
   void handleGraphsPage();
+  void handleHardwarePage();
   void handleFirmwarePage();
   void handleFirmwarePost();
   void handleFirmwareUpload();

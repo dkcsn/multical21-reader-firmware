@@ -1,5 +1,6 @@
 #include "AppWebServer.h"
 #include "FirmwareVersion.h"
+#include "hwconfig.h"
 
 #if defined(ESP8266)
   #include <ESP8266WiFi.h>
@@ -36,6 +37,40 @@ static String jsonEscape(const String& value) {
       out += c;
     }
   }
+  return out;
+}
+
+#if defined(ESP32)
+static String pinLabel(int pin) {
+  return String("GPIO") + String(pin);
+}
+#endif
+
+static String hardwareBoardProfile() {
+#if defined(BOARD_LOLIN_S2_MINI)
+  return F("LOLIN S2 Mini");
+#elif defined(ESP8266)
+  return F("ESP8266 D1 mini / Lite");
+#elif defined(ESP32)
+  return F("ESP32");
+#else
+  return F("Unknown");
+#endif
+}
+
+static String wiringRow(const char* ccPin, const char* signal, const String& target, const char* color, const char* note = "") {
+  String out;
+  out += F("<tr><td><strong>");
+  out += ccPin;
+  out += F("</strong></td><td>");
+  out += signal;
+  out += F("</td><td><code>");
+  out += htmlEscape(target);
+  out += F("</code></td><td>");
+  out += color;
+  out += F("</td><td>");
+  out += note;
+  out += F("</td></tr>");
   return out;
 }
 
@@ -510,6 +545,7 @@ void AppWebServer::begin() {
   server.on("/", HTTP_GET, std::bind(&AppWebServer::handleRoot, this));
   server.on("/setup", HTTP_GET, std::bind(&AppWebServer::handleSetupPage, this));
   server.on("/graphs", HTTP_GET, std::bind(&AppWebServer::handleGraphsPage, this));
+  server.on("/hardware", HTTP_GET, std::bind(&AppWebServer::handleHardwarePage, this));
   server.on("/firmware", HTTP_GET, std::bind(&AppWebServer::handleFirmwarePage, this));
   server.on("/firmware", HTTP_POST, std::bind(&AppWebServer::handleFirmwarePost, this), std::bind(&AppWebServer::handleFirmwareUpload, this));
   server.on("/configuration.json", HTTP_GET, std::bind(&AppWebServer::handleConfigJson, this));
@@ -625,6 +661,66 @@ void AppWebServer::handleGraphsPage() {
   body += F("</span></div>");
   body += graphBars(history, period, now);
   body += F("</section>");
+  sendHtml(body);
+}
+
+void AppWebServer::handleHardwarePage() {
+  String body;
+  body.reserve(3600);
+  body += F("<section><div class=\"sectionHead\"><h2>Advanced hardware</h2><span>CC1101 wiring</span></div>");
+  body += F("<dl><dt>Board profile</dt><dd>");
+  body += htmlEscape(hardwareBoardProfile());
+  body += F("</dd><dt>Firmware board</dt><dd>");
+  body += htmlEscape(firmwareBoardName());
+  body += F("</dd></dl></section>");
+
+  body += F("<section><div class=\"sectionHead\"><h2>Active pin map</h2><span>Read only</span></div>");
+  body += F("<table class=\"pinTable\"><thead><tr><th>CC1101 pin</th><th>Signal</th><th>Board pin</th><th>Wire</th><th>Note</th></tr></thead><tbody>");
+#if defined(BOARD_LOLIN_S2_MINI)
+  body += wiringRow("VCC", "Power", "3V3", "Brown");
+  body += wiringRow("GND", "Ground", "GND", "Blue/white");
+  body += wiringRow("MOSI", "SPI data to CC1101", pinLabel(MOSI), "Green");
+  body += wiringRow("SCLK", "SPI clock", pinLabel(SCK), "Orange");
+  body += wiringRow("MISO", "SPI data from CC1101", pinLabel(MISO), "Orange/white");
+  body += wiringRow("GDO2", "Status output", "GPIO5", "Blue", "Not used by firmware");
+  body += wiringRow("GDO0", "Packet interrupt", pinLabel(CC1101_GDO0), "White", "Used by firmware");
+  body += wiringRow("CSN", "SPI chip select", pinLabel(SS), "Brown/white");
+#elif defined(ESP8266)
+  body += wiringRow("VCC", "Power", "3V3", "");
+  body += wiringRow("GND", "Ground", "GND", "");
+  body += wiringRow("MOSI", "SPI data to CC1101", "D7 / GPIO13", "");
+  body += wiringRow("SCLK", "SPI clock", "D5 / GPIO14", "");
+  body += wiringRow("MISO", "SPI data from CC1101", "D6 / GPIO12", "");
+  body += wiringRow("GDO2", "Status output", "not connected", "", "Not used by firmware");
+  body += wiringRow("GDO0", "Packet interrupt", "D2 / GPIO4", "", "Used by firmware");
+  body += wiringRow("CSN", "SPI chip select", "D8 / GPIO15", "");
+#else
+  body += wiringRow("VCC", "Power", "3V3", "");
+  body += wiringRow("GND", "Ground", "GND", "");
+  body += wiringRow("MOSI", "SPI data to CC1101", pinLabel(MOSI), "");
+  body += wiringRow("SCLK", "SPI clock", pinLabel(SCK), "");
+  body += wiringRow("MISO", "SPI data from CC1101", pinLabel(MISO), "");
+  body += wiringRow("GDO2", "Status output", "not connected", "", "Not used by firmware");
+  body += wiringRow("GDO0", "Packet interrupt", pinLabel(CC1101_GDO0), "", "Used by firmware");
+  body += wiringRow("CSN", "SPI chip select", pinLabel(SS), "");
+#endif
+  body += F("</tbody></table></section>");
+
+  body += F("<section><div class=\"sectionHead\"><h2>Soldering diagram</h2><span>Expected wiring</span></div>");
+  body += F("<div class=\"wireDiagram\"><div><h3>CC1101</h3><code>VCC<br>GND<br>MOSI<br>SCLK<br>MISO<br>GDO2<br>GDO0<br>CSN</code></div>");
+  body += F("<div class=\"wireLines\"><span>--------></span><span>--------></span><span>--------></span><span>--------></span><span>--------></span><span>--------></span><span>--------></span><span>--------></span></div>");
+  body += F("<div><h3>");
+  body += htmlEscape(hardwareBoardProfile());
+  body += F("</h3><code>");
+#if defined(BOARD_LOLIN_S2_MINI)
+  body += F("3V3<br>GND<br>GPIO11<br>GPIO7<br>GPIO9<br>GPIO5 unused<br>GPIO13<br>GPIO12");
+#elif defined(ESP8266)
+  body += F("3V3<br>GND<br>D7 / GPIO13<br>D5 / GPIO14<br>D6 / GPIO12<br>not connected<br>D2 / GPIO4<br>D8 / GPIO15");
+#else
+  body += F("3V3<br>GND<br>");
+  body += pinLabel(MOSI) + F("<br>") + pinLabel(SCK) + F("<br>") + pinLabel(MISO) + F("<br>not connected<br>") + pinLabel(CC1101_GDO0) + F("<br>") + pinLabel(SS);
+#endif
+  body += F("</code></div></div><p class=\"hint\">GDO0 is the interrupt line. GDO2 is optional and not used by this firmware.</p></section>");
   sendHtml(body);
 }
 
@@ -1060,6 +1156,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F(".bars{height:180px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden;background:linear-gradient(to top,#f8fafc,#fff)}");
   html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px;font-style:normal}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0}.barwrap:nth-child(2n) .bar{background:#147d64}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
   html += F(".minutePanel{padding-bottom:12px}.minuteBars{height:176px;display:grid;grid-template-columns:repeat(30,1fr);gap:3px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden;background:linear-gradient(to top,#f8fafc,#fff)}.minuteWrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:9px;font-style:normal}.minuteBar{align-self:end;background:#0b7285;border-radius:3px 3px 0 0;min-height:0}.minuteWrap:nth-child(2n) .minuteBar{background:#147d64}.minuteWrap span{white-space:nowrap;overflow:hidden;text-overflow:clip}.minuteLiters{font-weight:700;color:#102a43}.minuteAge{color:#52606d}");
+  html += F(".pinTable{width:100%;border-collapse:collapse}.pinTable th,.pinTable td{border-bottom:1px solid #d9e2ec;text-align:left;padding:9px;font-size:13px}.pinTable th{color:#52606d;text-transform:uppercase;font-size:11px}.wireDiagram{display:grid;grid-template-columns:max-content max-content max-content;gap:16px;align-items:start;overflow:auto}.wireDiagram h3{font-size:14px;margin:0 0 8px;color:#102a43}.wireDiagram code{display:block;line-height:1.8;background:#f8fafc;border:1px solid #d9e2ec;border-radius:6px;padding:10px;white-space:nowrap}.wireLines{display:grid;gap:0;margin-top:28px;color:#0b7285;font-weight:900;line-height:1.8}");
   html += F("@media(max-width:1200px){.cards{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}}@media(max-width:980px){header{grid-template-columns:1fr}.statusGroup,.navLinks{justify-content:flex-start;flex-wrap:wrap}.statusGroup{overflow:visible}.navLinks{border-left:0;padding-left:0;border-top:1px solid #486581;padding-top:8px}}@media(max-width:640px){main{padding:12px}.hero{grid-template-columns:1fr}.hero h2{font-size:24px}dl{grid-template-columns:1fr}.heroMeter strong{font-size:30px}nav a span{display:none}.statusPill{min-width:62px}}");
   html += F("</style></head><body><header><h1>Multical 21 Reader</h1><nav class=\"topRight\"><div class=\"statusGroup\">");
   html += F("<span id=\"topFramePill\" class=\"statusPill ");
@@ -1098,6 +1195,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("<a href=\"/\" title=\"Dashboard\"><svg viewBox=\"0 0 24 24\"><path d=\"M3 12l9-9 9 9\"></path><path d=\"M5 10v10h14V10\"></path></svg><span>Dashboard</span></a>");
   html += F("<a href=\"/setup\" title=\"Setup\"><svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"3\"></circle><path d=\"M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.1 2.1-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V20h-3v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-2.1-2.1.1-.1A1.7 1.7 0 0 0 5 15a1.7 1.7 0 0 0-1.5-1H3v-3h.5A1.7 1.7 0 0 0 5 10a1.7 1.7 0 0 0-.3-1.9l-.1-.1 2.1-2.1.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V4h3v.8a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 2.1 2.1-.1.1A1.7 1.7 0 0 0 19 10a1.7 1.7 0 0 0 1.5 1h.5v3h-.5a1.7 1.7 0 0 0-1.1 1z\"></path></svg><span>Setup</span></a>");
   html += F("<a href=\"/graphs\" title=\"Graphs\"><svg viewBox=\"0 0 24 24\"><path d=\"M4 19V5\"></path><path d=\"M4 19h16\"></path><path d=\"M8 16v-4\"></path><path d=\"M12 16V8\"></path><path d=\"M16 16v-6\"></path></svg><span>Graphs</span></a>");
+  html += F("<a href=\"/hardware\" title=\"Hardware\"><svg viewBox=\"0 0 24 24\"><rect x=\"7\" y=\"7\" width=\"10\" height=\"10\" rx=\"1\"></rect><path d=\"M4 10h3M4 14h3M17 10h3M17 14h3M10 4v3M14 4v3M10 17v3M14 17v3\"></path></svg><span>Hardware</span></a>");
   html += F("<a href=\"/firmware\" title=\"Firmware\"><svg viewBox=\"0 0 24 24\"><path d=\"M12 3v12\"></path><path d=\"M8 7l4-4 4 4\"></path><path d=\"M5 15v4h14v-4\"></path></svg><span>FW ");
   html += htmlEscape(firmwareVersion());
   html += F("</span></a>");
