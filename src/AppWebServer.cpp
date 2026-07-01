@@ -465,12 +465,14 @@ static String graphTab(char period, char selected, const char* label) {
   return out;
 }
 
-static String setupTabs(bool hardwareActive) {
+static String setupTabs(const String& active) {
   String out;
   out += F("<div class=\"tabs setupTabs\"><a class=\"tab");
-  out += hardwareActive ? F("") : F(" active");
+  out += active == "settings" ? F(" active") : F("");
   out += F("\" href=\"/setup\">Settings</a><a class=\"tab");
-  out += hardwareActive ? F(" active") : F("");
+  out += active == "wifi" ? F(" active") : F("");
+  out += F("\" href=\"/setup?tab=wifi\">WiFi onboarding</a><a class=\"tab");
+  out += active == "hardware" ? F(" active") : F("");
   out += F("\" href=\"/hardware\">Hardware</a></div>");
   return out;
 }
@@ -483,25 +485,10 @@ static bool isOpenNetwork(uint8_t index) {
 #endif
 }
 
-static String buildSetupSection(AppConfig& config, WaterData& waterData, bool onboardingMode, const String& error = String()) {
+static String buildWifiCard(AppConfig& config, const String& deviceIp) {
   const AppConfigData& cfg = config.data();
-  const String deviceIp = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
   String out;
-  out += F("<section id=\"setup\" class=\"setupPanel");
-  out += onboardingMode ? F(" onboardingPanel") : F("");
-  out += F("\"><div class=\"sectionHead\"><h2>");
-  out += onboardingMode ? F("WiFi onboarding") : F("Setup");
-  out += F("</h2><span>");
-  out += onboardingMode ? F("Setup AP") : F("Settings");
-  out += F("</span></div>");
-  out += setupTabs(false);
-  if (error.length() > 0) {
-    out += F("<div class=\"formError\"><strong>Settings not saved</strong><span>");
-    out += htmlEscape(error);
-    out += F("</span></div>");
-  }
-  out += F("<form class=\"setupForm\" method=\"post\" action=\"/save\">");
-  out += F("<div class=\"formSection\"><h3>WiFi</h3><div class=\"formGrid\"><label>Device name<input name=\"deviceName\" value=\"");
+  out += F("<div class=\"setupCard accentWifi\"><h3>WiFi onboarding</h3><p>Device name, WiFi network, captive portal and local address.</p><div class=\"formGrid\"><label>Device name<input name=\"deviceName\" value=\"");
   out += htmlEscape(config.deviceName());
   out += F("\" maxlength=\"32\"></label>");
   out += F("<label>WiFi SSID<input id=\"wifiSsid\" name=\"wifiSsid\" value=\"");
@@ -516,7 +503,39 @@ static String buildSetupSection(AppConfig& config, WaterData& waterData, bool on
   out += htmlEscape(deviceIp);
   out += F("</small><small>Reboot after save to apply hostname and mDNS changes</small></div>");
   out += F("</div><div class=\"wifiActions\"><button type=\"button\" onclick=\"scanWifi()\">Scan WiFi</button><button type=\"button\" onclick=\"testWifi()\">Test WiFi</button><span id=\"wifiResult\"></span></div><div id=\"wifiList\" class=\"wifiList\"></div></div>");
-  out += F("<div class=\"formSection\"><h3>Time</h3><div class=\"formGrid\"><label>NTP enabled<select name=\"ntpEnabled\"><option value=\"1\"");
+  return out;
+}
+
+static String buildSetupSection(AppConfig& config, WaterData& waterData, bool onboardingMode, const String& activeTab = String("settings"), const String& error = String()) {
+  const AppConfigData& cfg = config.data();
+  const String deviceIp = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
+  const bool wifiTab = onboardingMode || activeTab == "wifi";
+  String out;
+  out += F("<section id=\"setup\" class=\"setupPanel");
+  out += onboardingMode ? F(" onboardingPanel") : F("");
+  out += F("\"><div class=\"sectionHead\"><h2>");
+  out += onboardingMode || wifiTab ? F("WiFi onboarding") : F("Setup");
+  out += F("</h2><span>");
+  out += onboardingMode ? F("Setup AP") : (wifiTab ? F("WiFi") : F("Settings"));
+  out += F("</span></div>");
+  out += setupTabs(wifiTab ? String("wifi") : String("settings"));
+  if (error.length() > 0) {
+    out += F("<div class=\"formError\"><strong>Settings not saved</strong><span>");
+    out += htmlEscape(error);
+    out += F("</span></div>");
+  }
+  out += F("<form class=\"setupForm\" method=\"post\" action=\"/save\">");
+  if (wifiTab) {
+    out += buildWifiCard(config, deviceIp);
+  } else {
+    out += F("<div class=\"setupCard accentMeter\"><h3>Meter</h3><p>Multical 21 identity and AES decrypt key.</p><div class=\"formGrid\"><label>Meter serial hex<input name=\"meterSerial\" value=\"");
+    out += htmlEscape(config.meterSerialHex());
+    out += F("\" maxlength=\"8\" inputmode=\"text\" pattern=\"[A-Fa-f0-9]{8}\" title=\"8 hex characters, no 0x, spaces, or commas\"></label>");
+    out += F("<label>AES key hex<input name=\"encryptionKey\" type=\"password\" placeholder=\"");
+    out += config.hasMeter() ? F("***") : F("32 hex chars");
+    out += F("\" maxlength=\"32\" inputmode=\"text\" pattern=\"[A-Fa-f0-9]{32}\" title=\"32 hex characters, no 0x, spaces, or commas\"></label><small class=\"formHint\">Use plain hex only. Example serial: 77513579. Example AES key length: 32 characters.</small></div></div>");
+
+    out += F("<div class=\"setupCard accentTime\"><h3>Time</h3><p>NTP and local calendar offset used by history buckets and graph axes.</p><div class=\"formGrid\"><label>NTP enabled<select name=\"ntpEnabled\"><option value=\"1\"");
   out += cfg.ntpEnabled ? F(" selected") : F("");
   out += F(">Enabled</option><option value=\"0\"");
   out += !cfg.ntpEnabled ? F(" selected") : F("");
@@ -547,11 +566,12 @@ static String buildSetupSection(AppConfig& config, WaterData& waterData, bool on
   } else {
     out += F("Last attempt ");
     out += ageText(waterData.ntpLastAttemptMillis);
-    out += F(", attempts ");
-    out += String(waterData.ntpAttemptCount);
+  out += F(", attempts ");
+  out += String(waterData.ntpAttemptCount);
   }
-  out += F("</small></div></div></div>");
-  out += F("<div class=\"formSection\"><h3>MQTT</h3><div class=\"formGrid\"><label>MQTT enabled<select name=\"mqttEnabled\"><option value=\"1\"");
+    out += F("</small></div></div></div>");
+
+    out += F("<div class=\"setupCard accentMqtt\"><h3>MQTT and Home Assistant</h3><p>Optional local broker publishing and Home Assistant discovery.</p><div class=\"formGrid\"><label>MQTT enabled<select name=\"mqttEnabled\"><option value=\"1\"");
   out += cfg.mqttEnabled ? F(" selected") : F("");
   out += F(">Enabled</option><option value=\"0\"");
   out += !cfg.mqttEnabled ? F(" selected") : F("");
@@ -580,16 +600,17 @@ static String buildSetupSection(AppConfig& config, WaterData& waterData, bool on
   out += cfg.mqttSecure ? F(" selected") : F("");
   out += F(">Enabled</option><option value=\"0\"");
   out += !cfg.mqttSecure ? F(" selected") : F("");
-  out += F(">Disabled</option></select></label></div></div>");
-  out += F("<div class=\"formSection\"><h3>Integrations</h3><div class=\"formGrid\"><label>Home Assistant discovery<select name=\"homeAssistantDiscovery\"><option value=\"1\"");
+    out += F(">Disabled</option></select></label>");
+    out += F("<label>Home Assistant discovery<select name=\"homeAssistantDiscovery\"><option value=\"1\"");
   out += cfg.homeAssistantDiscovery ? F(" selected") : F("");
   out += F(">Enabled</option><option value=\"0\"");
   out += !cfg.homeAssistantDiscovery ? F(" selected") : F("");
   out += F(">Disabled</option></select></label>");
   out += F("<label>HA discovery prefix<input name=\"homeAssistantPrefix\" value=\"");
   out += htmlEscape(cfg.homeAssistantPrefix);
-  out += F("\"></label><small class=\"formHint\">Publishes MQTT discovery messages so Home Assistant can create water meter sensors automatically.</small></div></div>");
-  out += F("<div class=\"formSection\"><h3>Debug</h3><div class=\"formGrid\">");
+    out += F("\"></label><small class=\"formHint\">Publishes MQTT discovery messages so Home Assistant can create water meter sensors automatically.</small></div></div>");
+
+    out += F("<div class=\"setupCard accentVersion\"><h3>Diagnostics</h3><p>Runtime debug output and support information.</p><div class=\"formGrid\">");
   out += F("<label>Telnet debug<select name=\"telnetDebugEnabled\"><option value=\"1\"");
   out += cfg.telnetDebugEnabled ? F(" selected") : F("");
   out += F(">Enabled</option><option value=\"0\"");
@@ -598,15 +619,10 @@ static String buildSetupSection(AppConfig& config, WaterData& waterData, bool on
   out += htmlEscape(deviceIp);
   out += F(" 23 or telnet ");
   out += htmlEscape(deviceIp);
-  out += F(" 23</small></label></div></div>");
-  out += F("<div class=\"formSection\"><h3>Meter</h3><div class=\"formGrid\"><label>Meter serial hex<input name=\"meterSerial\" value=\"");
-  out += htmlEscape(config.meterSerialHex());
-  out += F("\" maxlength=\"8\" inputmode=\"text\" pattern=\"[A-Fa-f0-9]{8}\" title=\"8 hex characters, no 0x, spaces, or commas\"></label>");
-  out += F("<label>AES key hex<input name=\"encryptionKey\" type=\"password\" placeholder=\"");
-  out += config.hasMeter() ? F("***") : F("32 hex chars");
-  out += F("\" maxlength=\"32\" inputmode=\"text\" pattern=\"[A-Fa-f0-9]{32}\" title=\"32 hex characters, no 0x, spaces, or commas\"></label><small class=\"formHint\">Use plain hex only. Example serial: 77513579. Example AES key length: 32 characters.</small></div></div>");
+    out += F(" 23</small></label><div class=\"statusLine\"><span>Diagnostics</span><strong><a href=\"/diagnostics.json\">Download JSON</a></strong><small>No secrets are included.</small></div></div></div>");
+  }
   out += F("<div class=\"actionRow\"><button type=\"submit\">Save settings</button></div></form>");
-  out += F("<div class=\"formSection deviceActions\"><h3>Device actions</h3><div class=\"actionRow\"><form method=\"post\" action=\"/reboot\"><button type=\"submit\">Reboot</button></form>");
+  out += F("<div class=\"setupCard deviceActions\"><h3>Device actions</h3><p>Restart or clear local state.</p><div class=\"actionRow\"><form method=\"post\" action=\"/reboot\"><button type=\"submit\">Reboot</button></form>");
   out += F("<form method=\"post\" action=\"/reset-config\"><button class=\"danger\" type=\"submit\" onclick=\"return confirm('Reset setup/config only? Local water history is kept.')\">Reset setup/config</button></form>");
   out += F("<form method=\"post\" action=\"/factory-reset\"><button class=\"danger\" type=\"submit\" onclick=\"return confirm('Factory reset deletes setup/config and local water history. Continue?')\">Factory reset</button></form></div>");
   out += F("<p class=\"hint\">Reset setup/config keeps local history. Factory reset deletes both setup/config and persisted history.</p></div></section>");
@@ -719,7 +735,8 @@ void AppWebServer::handleRoot() {
 
 void AppWebServer::handleSetupPage() {
   const bool onboardingMode = WiFi.status() != WL_CONNECTED || !config.hasWifi();
-  sendHtml(buildSetupSection(config, waterData, onboardingMode));
+  String activeTab = server.arg("tab") == "wifi" ? String("wifi") : String("settings");
+  sendHtml(buildSetupSection(config, waterData, onboardingMode, activeTab));
 }
 
 void AppWebServer::handleGraphsPage() {
@@ -747,7 +764,7 @@ void AppWebServer::handleHardwarePage() {
   String body;
   body.reserve(5200);
   body += F("<section><div class=\"sectionHead\"><h2>Advanced hardware</h2><span>CC1101 wiring</span></div>");
-  body += setupTabs(true);
+  body += setupTabs("hardware");
   body += F("<dl><dt>Board profile</dt><dd>");
   body += htmlEscape(hardwareBoardProfile());
   body += F("</dd><dt>Firmware board</dt><dd>");
@@ -1260,50 +1277,84 @@ void AppWebServer::handleCaptiveRedirect() {
 void AppWebServer::handleSave() {
   AppConfigData& cfg = config.data();
 
-  config.setDeviceName(server.arg("deviceName"));
-  copyArg(cfg.wifiSsid, sizeof(cfg.wifiSsid), server.arg("wifiSsid"));
-  String wifiPassword = server.arg("wifiPassword");
-  if (wifiPassword.length() > 0 && wifiPassword != "***") {
-    copyArg(cfg.wifiPassword, sizeof(cfg.wifiPassword), wifiPassword);
+  if (server.hasArg("deviceName")) {
+    config.setDeviceName(server.arg("deviceName"));
+  }
+  if (server.hasArg("wifiSsid")) {
+    copyArg(cfg.wifiSsid, sizeof(cfg.wifiSsid), server.arg("wifiSsid"));
+  }
+  if (server.hasArg("wifiPassword")) {
+    String wifiPassword = server.arg("wifiPassword");
+    if (wifiPassword.length() > 0 && wifiPassword != "***") {
+      copyArg(cfg.wifiPassword, sizeof(cfg.wifiPassword), wifiPassword);
+    }
   }
 
-  cfg.ntpEnabled = server.arg("ntpEnabled") == "1";
-  copyArg(cfg.ntpServer, sizeof(cfg.ntpServer), server.arg("ntpServer"));
-  if (strlen(cfg.ntpServer) == 0) {
-    strncpy(cfg.ntpServer, "pool.ntp.org", sizeof(cfg.ntpServer) - 1);
-    cfg.ntpServer[sizeof(cfg.ntpServer) - 1] = '\0';
+  if (server.hasArg("ntpEnabled")) {
+    cfg.ntpEnabled = server.arg("ntpEnabled") == "1";
   }
-  cfg.timezoneOffsetMinutes = (int16_t) server.arg("timezoneOffsetMinutes").toInt();
-  cfg.mqttEnabled = server.arg("mqttEnabled") == "1";
-  cfg.mqttRetain = server.arg("mqttRetain") == "1";
-  cfg.mqttSecure = server.arg("mqttSecure") == "1";
-  cfg.homeAssistantDiscovery = server.arg("homeAssistantDiscovery") == "1";
-  cfg.telnetDebugEnabled = server.arg("telnetDebugEnabled") == "1";
-  copyArg(cfg.homeAssistantPrefix, sizeof(cfg.homeAssistantPrefix), server.arg("homeAssistantPrefix"));
-  if (strlen(cfg.homeAssistantPrefix) == 0) {
-    strncpy(cfg.homeAssistantPrefix, "homeassistant", sizeof(cfg.homeAssistantPrefix) - 1);
-    cfg.homeAssistantPrefix[sizeof(cfg.homeAssistantPrefix) - 1] = '\0';
+  if (server.hasArg("ntpServer")) {
+    copyArg(cfg.ntpServer, sizeof(cfg.ntpServer), server.arg("ntpServer"));
+    if (strlen(cfg.ntpServer) == 0) {
+      strncpy(cfg.ntpServer, "pool.ntp.org", sizeof(cfg.ntpServer) - 1);
+      cfg.ntpServer[sizeof(cfg.ntpServer) - 1] = '\0';
+    }
   }
-  copyArg(cfg.mqttHost, sizeof(cfg.mqttHost), server.arg("mqttHost"));
-  cfg.mqttPort = (uint16_t) server.arg("mqttPort").toInt();
-  if (cfg.mqttPort == 0) {
-    cfg.mqttPort = cfg.mqttSecure ? 8883 : 1883;
+  if (server.hasArg("timezoneOffsetMinutes")) {
+    cfg.timezoneOffsetMinutes = (int16_t) server.arg("timezoneOffsetMinutes").toInt();
   }
-  copyArg(cfg.mqttUsername, sizeof(cfg.mqttUsername), server.arg("mqttUsername"));
-  String mqttPassword = server.arg("mqttPassword");
-  if (mqttPassword.length() > 0 && mqttPassword != "***") {
-    copyArg(cfg.mqttPassword, sizeof(cfg.mqttPassword), mqttPassword);
+  if (server.hasArg("mqttEnabled")) {
+    cfg.mqttEnabled = server.arg("mqttEnabled") == "1";
   }
-  copyArg(cfg.mqttBaseTopic, sizeof(cfg.mqttBaseTopic), server.arg("mqttBaseTopic"));
-  if (strlen(cfg.mqttBaseTopic) == 0) {
-    strncpy(cfg.mqttBaseTopic, "watermeter", sizeof(cfg.mqttBaseTopic) - 1);
-    cfg.mqttBaseTopic[sizeof(cfg.mqttBaseTopic) - 1] = '\0';
+  if (server.hasArg("mqttRetain")) {
+    cfg.mqttRetain = server.arg("mqttRetain") == "1";
+  }
+  if (server.hasArg("mqttSecure")) {
+    cfg.mqttSecure = server.arg("mqttSecure") == "1";
+  }
+  if (server.hasArg("homeAssistantDiscovery")) {
+    cfg.homeAssistantDiscovery = server.arg("homeAssistantDiscovery") == "1";
+  }
+  if (server.hasArg("telnetDebugEnabled")) {
+    cfg.telnetDebugEnabled = server.arg("telnetDebugEnabled") == "1";
+  }
+  if (server.hasArg("homeAssistantPrefix")) {
+    copyArg(cfg.homeAssistantPrefix, sizeof(cfg.homeAssistantPrefix), server.arg("homeAssistantPrefix"));
+    if (strlen(cfg.homeAssistantPrefix) == 0) {
+      strncpy(cfg.homeAssistantPrefix, "homeassistant", sizeof(cfg.homeAssistantPrefix) - 1);
+      cfg.homeAssistantPrefix[sizeof(cfg.homeAssistantPrefix) - 1] = '\0';
+    }
+  }
+  if (server.hasArg("mqttHost")) {
+    copyArg(cfg.mqttHost, sizeof(cfg.mqttHost), server.arg("mqttHost"));
+  }
+  if (server.hasArg("mqttPort")) {
+    cfg.mqttPort = (uint16_t) server.arg("mqttPort").toInt();
+    if (cfg.mqttPort == 0) {
+      cfg.mqttPort = cfg.mqttSecure ? 8883 : 1883;
+    }
+  }
+  if (server.hasArg("mqttUsername")) {
+    copyArg(cfg.mqttUsername, sizeof(cfg.mqttUsername), server.arg("mqttUsername"));
+  }
+  if (server.hasArg("mqttPassword")) {
+    String mqttPassword = server.arg("mqttPassword");
+    if (mqttPassword.length() > 0 && mqttPassword != "***") {
+      copyArg(cfg.mqttPassword, sizeof(cfg.mqttPassword), mqttPassword);
+    }
+  }
+  if (server.hasArg("mqttBaseTopic")) {
+    copyArg(cfg.mqttBaseTopic, sizeof(cfg.mqttBaseTopic), server.arg("mqttBaseTopic"));
+    if (strlen(cfg.mqttBaseTopic) == 0) {
+      strncpy(cfg.mqttBaseTopic, "watermeter", sizeof(cfg.mqttBaseTopic) - 1);
+      cfg.mqttBaseTopic[sizeof(cfg.mqttBaseTopic) - 1] = '\0';
+    }
   }
 
   String meterSerial = server.arg("meterSerial");
   if (meterSerial.length() > 0 && !config.setMeterSerialHex(meterSerial)) {
     String body;
-    body += buildSetupSection(config, waterData, false, F("Meter serial must be exactly 8 hex characters. Do not use 0x, spaces, or commas."));
+    body += buildSetupSection(config, waterData, false, "settings", F("Meter serial must be exactly 8 hex characters. Do not use 0x, spaces, or commas."));
     server.sendHeader("Cache-Control", "no-store");
     sendHtml(body);
     return;
@@ -1312,7 +1363,7 @@ void AppWebServer::handleSave() {
   String encryptionKey = server.arg("encryptionKey");
   if (encryptionKey.length() > 0 && encryptionKey != "***" && !config.setEncryptionKeyHex(encryptionKey)) {
     String body;
-    body += buildSetupSection(config, waterData, false, F("AES key must be exactly 32 hex characters. Do not use 0x, spaces, or commas."));
+    body += buildSetupSection(config, waterData, false, "settings", F("AES key must be exactly 32 hex characters. Do not use 0x, spaces, or commas."));
     server.sendHeader("Cache-Control", "no-store");
     sendHtml(body);
     return;
@@ -1367,7 +1418,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F(".hero{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:18px;align-items:center;background:#12344d;color:white;border-color:#12344d}.hero h2{font-size:28px;margin:0 0 8px}.eyebrow{margin:0 0 6px;color:#9fb3c8;font-size:12px;font-weight:800;text-transform:uppercase}.heroText{margin:0;color:#d9e2ec;white-space:pre-line}.heroAction{margin:10px 0 0}.heroAction:empty{display:none}.heroAction a{display:inline-flex;color:white;background:#0b7285;text-decoration:none;border-radius:5px;padding:7px 10px;font-weight:800;font-size:12px}.heroMeter{border:1px solid #486581;border-radius:8px;padding:14px;background:#0f2f46}.heroMeter span,.heroMeter small{display:block;color:#bcccdc}.heroMeter strong{display:block;font-size:34px;line-height:1.1;margin:4px 0}");
   html += F(".cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;background:transparent;border:0;padding:0}.card{background:white;border:1px solid #d9e2ec;border-left:5px solid #0b7285;border-radius:8px;padding:14px;min-height:108px;display:grid;gap:10px}.cardTop{display:flex;justify-content:space-between;gap:8px;align-items:center}.cardTop span{font-size:12px;color:#52606d;font-weight:800;text-transform:uppercase}.card strong{font-size:22px;line-height:1.15;overflow-wrap:anywhere}.card small{color:#52606d;overflow-wrap:anywhere}.card a{font-size:22px;font-weight:800}.chip{border-radius:999px;padding:4px 8px;font-size:11px;color:white;white-space:nowrap}.ok{background:#147d64}.warn{background:#b7791f}.off{background:#627d98}.accentRx{border-left-color:#147d64}.accentWater{border-left-color:#0b7285}.accentUsage{border-left-color:#2f9e44}.accentDaily{border-left-color:#1864ab}.accentWeekly{border-left-color:#6741d9}.accentWifi{border-left-color:#1864ab}.accentMqtt{border-left-color:#6741d9}.accentTime{border-left-color:#d9480f}.accentMeter{border-left-color:#c2410c}.accentVersion{border-left-color:#087f5b}");
   html += F(".sectionHead{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin:0 0 10px}.sectionHead h2{margin:0}.sectionHead span{color:#52606d;font-size:12px;font-weight:700;text-transform:uppercase}.graphPanel{padding-bottom:12px}.graphSummary{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px}.graphSummary span{background:#f0f4f8;border:1px solid #d9e2ec;border-radius:6px;padding:7px 9px;color:#52606d;font-size:12px}.graphSummary strong{color:#102a43}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}.tab{border:1px solid #bcccdc;background:#f0f4f8;color:#102a43;text-decoration:none;border-radius:6px;padding:8px 10px;font-weight:800;font-size:13px}.tab.active{background:#0b7285;border-color:#0b7285;color:white}");
-  html += F(".setupPanel{border-left:5px solid #0b7285}.setupForm{display:block}.formError{border:1px solid #f5c2c7;border-left:5px solid #c92a2a;background:#fff5f5;border-radius:7px;padding:10px;margin:0 0 12px;display:grid;gap:3px;color:#7f1d1d}.formError strong{color:#7f1d1d}.formSection{border-top:1px solid #d9e2ec;padding-top:14px;margin-top:14px}.formSection:first-of-type{border-top:0;padding-top:0}.formSection h3{font-size:15px;margin:0 0 10px;color:#102a43}.formGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.formHint{grid-column:1/-1;color:#52606d;font-size:12px}.actionRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.actionRow form{display:block}.actionRow button{min-width:170px}.statusLine{border:1px solid #d9e2ec;border-radius:6px;padding:10px;background:#f8fafc;display:grid;gap:4px;color:#52606d}.statusLine strong{color:#102a43}.statusLine small{font-size:12px;color:#627d98}.deviceActions{padding-bottom:0}.onboardingPanel{border-color:#0b7285;background:#f8fcfd}.onboardingPanel .sectionHead h2{font-size:24px}");
+  html += F(".setupPanel{border-left:5px solid #0b7285}.setupForm{display:block}.formError{border:1px solid #f5c2c7;border-left:5px solid #c92a2a;background:#fff5f5;border-radius:7px;padding:10px;margin:0 0 12px;display:grid;gap:3px;color:#7f1d1d}.formError strong{color:#7f1d1d}.setupCard{border:1px solid #d9e2ec;border-left:5px solid #0b7285;border-radius:8px;background:#f8fafc;padding:14px;margin:0 0 14px}.setupCard h3{font-size:16px;margin:0 0 6px;color:#102a43}.setupCard p{margin:0 0 12px;color:#52606d;font-size:13px}.formGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.formHint{grid-column:1/-1;color:#52606d;font-size:12px}.actionRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.actionRow form{display:block}.actionRow button{min-width:170px}.statusLine{border:1px solid #d9e2ec;border-radius:6px;padding:10px;background:white;display:grid;gap:4px;color:#52606d}.statusLine strong{color:#102a43}.statusLine small{font-size:12px;color:#627d98}.deviceActions{border-left-color:#b7791f}.onboardingPanel{border-color:#0b7285;background:#f8fcfd}.onboardingPanel .sectionHead h2{font-size:24px}");
   html += F(".wifiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.wifiActions span{font-size:13px;color:#334e68}.wifiList{grid-column:1/-1;display:grid;gap:6px}.wifiNet{display:flex;justify-content:space-between;gap:10px;border:1px solid #d9e2ec;border-radius:6px;padding:8px;background:#f8fafc;cursor:pointer}.wifiNet small{color:#52606d}");
   html += F(".bars{height:180px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden;background:linear-gradient(to top,#f8fafc,#fff)}");
   html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px;font-style:normal}.bar{align-self:end;background:#0b7285;border-radius:4px 4px 0 0}.barwrap:nth-child(2n) .bar{background:#147d64}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
