@@ -620,12 +620,12 @@ static String buildSetupSection(AppConfig& config, WaterData& waterData, bool on
   out += F(" 23 or telnet ");
   out += htmlEscape(deviceIp);
     out += F(" 23</small></label><div class=\"statusLine\"><span>Diagnostics</span><strong><a href=\"/diagnostics.json\">Download JSON</a></strong><small>No secrets are included.</small></div></div></div>");
+    out += F("<div class=\"setupCard deviceActions\"><h3>Device actions</h3><p>Restart or clear local state.</p><div class=\"actionRow\"><form method=\"post\" action=\"/reboot\"><button type=\"submit\">Reboot</button></form>");
+    out += F("<form method=\"post\" action=\"/reset-config\"><button class=\"danger\" type=\"submit\" onclick=\"return confirm('Reset setup/config only? Local water history is kept.')\">Reset setup/config</button></form>");
+    out += F("<form method=\"post\" action=\"/factory-reset\"><button class=\"danger\" type=\"submit\" onclick=\"return confirm('Factory reset deletes setup/config and local water history. Continue?')\">Factory reset</button></form></div>");
+    out += F("<p class=\"hint\">Reset setup/config keeps local history. Factory reset deletes both setup/config and persisted history.</p></div>");
   }
-  out += F("<div class=\"actionRow\"><button type=\"submit\">Save settings</button></div></form>");
-  out += F("<div class=\"setupCard deviceActions\"><h3>Device actions</h3><p>Restart or clear local state.</p><div class=\"actionRow\"><form method=\"post\" action=\"/reboot\"><button type=\"submit\">Reboot</button></form>");
-  out += F("<form method=\"post\" action=\"/reset-config\"><button class=\"danger\" type=\"submit\" onclick=\"return confirm('Reset setup/config only? Local water history is kept.')\">Reset setup/config</button></form>");
-  out += F("<form method=\"post\" action=\"/factory-reset\"><button class=\"danger\" type=\"submit\" onclick=\"return confirm('Factory reset deletes setup/config and local water history. Continue?')\">Factory reset</button></form></div>");
-  out += F("<p class=\"hint\">Reset setup/config keeps local history. Factory reset deletes both setup/config and persisted history.</p></div></section>");
+  out += F("<div class=\"actionRow\"><button type=\"submit\">Save settings</button></div></form></section>");
   return out;
 }
 
