@@ -189,6 +189,12 @@ static bool connectWifi() {
 
 static void startSetupAp() {
   setupApMode = true;
+#if defined(ESP32)
+  Debug.println("Preparing ESP32 WiFi for setup AP");
+  WiFi.disconnect(true, false);
+  WiFi.mode(WIFI_OFF);
+  delay(250);
+#endif
   WiFi.mode(WIFI_AP);
   WiFi.setSleep(false);
   applyWifiHostname();
@@ -199,8 +205,22 @@ static void startSetupAp() {
   WiFi.softAPConfig(apIp, gateway, subnet);
   const char* apPassword = nullptr;
   bool apStarted = WiFi.softAP(apName.c_str(), apPassword, 6, false, 4);
+#if defined(ESP32)
+  if (!apStarted) {
+    Debug.println("Setup AP first start failed, retrying after WiFi reset");
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_OFF);
+    delay(500);
+    WiFi.mode(WIFI_AP);
+    WiFi.setSleep(false);
+    WiFi.softAPConfig(apIp, gateway, subnet);
+    apStarted = WiFi.softAP(apName.c_str(), apPassword, 6, false, 4);
+  }
+#endif
   delay(1000);
-  dnsServer.start(53, "*", WiFi.softAPIP());
+  if (apStarted) {
+    dnsServer.start(53, "*", WiFi.softAPIP());
+  }
   Debug.print(apStarted ? "Setup AP started: " : "Setup AP start failed: ");
   Debug.print(apName);
   Debug.print(apPassword == nullptr ? " open" : " secured");
