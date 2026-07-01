@@ -47,6 +47,7 @@ private:
   void handleSave();
   void handleReboot();
   void handleResetConfig();
+  void handleFactoryReset();
   void sendHtml(const String& body);
 };
 

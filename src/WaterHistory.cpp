@@ -98,6 +98,24 @@ void WaterHistory::loop() {
   save();
 }
 
+bool WaterHistory::flush() {
+  if (!dirty) {
+    return true;
+  }
+  return save();
+}
+
+bool WaterHistory::clear() {
+  setDefaults();
+  loaded = false;
+  dirty = false;
+  lastSaveAttempt = millis();
+  if (LittleFS.exists(HISTORY_FILE)) {
+    return LittleFS.remove(HISTORY_FILE);
+  }
+  return true;
+}
+
 uint32_t WaterHistory::getHourMilliM3(uint8_t age) const {
   if (age >= HOUR_BUCKETS) {
     return 0;

@@ -10,6 +10,8 @@ public:
   void begin();
   void update(const WaterData& data, time_t localNow);
   void loop();
+  bool flush();
+  bool clear();
 
   uint32_t getHourMilliM3(uint8_t age) const;
   uint32_t getMinuteMilliM3(uint8_t age) const;

@@ -84,6 +84,9 @@ Do not include `0x`, commas, or spaces in the web UI fields.
 - `/setup` - WiFi, NTP, MQTT, Home Assistant, Telnet, meter serial, AES key.
 - `/graphs` - hourly, daily, weekly, monthly, and yearly graphs.
 - `/firmware` - browser OTA firmware upload.
+- `/reset-config` - POST endpoint used by the setup UI to clear configuration.
+- `/factory-reset` - POST endpoint used by the setup UI to clear configuration
+  and local history.
 - `/data.json` - local JSON state API.
 - `/dayplot.json` - 24 hour plot data.
 - `/monthplot.json` - 31 day plot data.
@@ -141,6 +144,9 @@ usage from the Multical water consumption API:
 3. Upload the matching `.bin` file.
 4. The device validates the image and restarts when the upload succeeds.
 
+Dirty local history is flushed before the firmware update restart, so accepted
+meter deltas are not intentionally left only in RAM during OTA.
+
 For ESP8266 D1 mini Lite, use:
 
 ```text
@@ -182,10 +188,18 @@ profiles above.
 
 ## Force Setup / Captive Portal
 
-- Open `http://<device-ip>/setup` and press `Reset setup`.
+- Open `http://<device-ip>/setup` and press `Reset setup/config`.
 - The device clears runtime configuration and reboots into `Multical21-Setup`.
+- Local water history is kept.
 - Or erase flash before upload from PlatformIO if you want a fully clean first
   boot.
+
+## Reset Options
+
+- **Reset setup/config** clears WiFi, MQTT, NTP, meter serial, AES key, and other
+  EEPROM configuration. Persisted water history is kept.
+- **Factory reset** clears setup/config and deletes persisted LittleFS water
+  history. Use this only when you intentionally want a clean device.
 
 ## Telnet Debug
 
@@ -208,6 +222,51 @@ The file includes firmware version, board, IP/hostname, NTP attempts/sync age,
 CC1101 detection, radio profile, last accepted/rejected frame, MQTT/HA status,
 and whether meter serial/AES are configured. It does not expose WiFi password,
 MQTT password, AES key, or meter serial.
+
+## API Examples
+
+Read live state:
+
+```sh
+curl http://<device-ip>/data.json
+```
+
+Example fields:
+
+```json
+{
+  "valid": true,
+  "uptime_s": 3600,
+  "total_m3": 1376.002,
+  "current_hour_m3": 0.004,
+  "today_m3": 0.120,
+  "current_week_m3": 0.650,
+  "last_frame_age_s": 12,
+  "time_synced": true,
+  "alarms": {
+    "burst": false,
+    "leak": false,
+    "dry": false,
+    "reverse": false
+  }
+}
+```
+
+Read non-secret configuration status:
+
+```sh
+curl http://<device-ip>/configuration.json
+```
+
+Download diagnostics:
+
+```sh
+curl -o multical21-diagnostics.json http://<device-ip>/diagnostics.json
+```
+
+Configuration is changed through the browser setup form at `/setup`. There is no
+public JSON POST config API, which avoids exposing WiFi passwords, MQTT
+passwords, AES keys, or meter serials through a casual automation endpoint.
 
 ## Project Lineage
 
