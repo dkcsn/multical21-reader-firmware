@@ -31,6 +31,10 @@ public:
   uint32_t getLast10YearsMilliM3() const;
   bool isTimeSynced() const;
   bool wasLoaded() const;
+  int32_t currentDayKey() const;
+  int32_t currentWeekKey() const;
+  int32_t currentMonthKey() const;
+  int32_t currentYearKey() const;
 
 private:
   static const uint8_t HOUR_BUCKETS = 24;

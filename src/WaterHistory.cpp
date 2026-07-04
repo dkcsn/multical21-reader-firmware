@@ -301,6 +301,22 @@ bool WaterHistory::wasLoaded() const {
   return loaded;
 }
 
+int32_t WaterHistory::currentDayKey() const {
+  return state.currentDayKey;
+}
+
+int32_t WaterHistory::currentWeekKey() const {
+  return state.currentWeekKey;
+}
+
+int32_t WaterHistory::currentMonthKey() const {
+  return state.currentMonthKey;
+}
+
+int32_t WaterHistory::currentYearKey() const {
+  return state.currentYearKey;
+}
+
 void WaterHistory::setDefaults() {
   memset(&state, 0, sizeof(state));
   memset(minute, 0, sizeof(minute));

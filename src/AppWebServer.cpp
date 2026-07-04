@@ -263,122 +263,121 @@ static const char* monthName(uint8_t month) {
   return month < 12 ? names[month] : "";
 }
 
-static uint16_t graphCount(char period) {
-  if (period == 'h') return 24;
-  if (period == 'd') return 90;
-  if (period == 'w') return 156;
-  if (period == 'm') return 60;
-  return 10;
+static int32_t dayKeyForDate(uint16_t year, uint8_t month, uint8_t day) {
+  int y = year;
+  int m = month;
+  y -= m <= 2;
+  const int era = (y >= 0 ? y : y - 399) / 400;
+  const unsigned yoe = (unsigned) (y - era * 400);
+  const unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + day - 1;
+  const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return era * 146097 + (int) doe - 719468;
 }
 
-static uint32_t graphValue(WaterHistory& history, char period, uint16_t age) {
-  if (period == 'h') return history.getHourMilliM3(age);
-  if (period == 'd') return history.getDayMilliM3(age);
-  if (period == 'w') return history.getWeekMilliM3(age);
-  if (period == 'm') return history.getMonthMilliM3(age);
-  return history.getYearMilliM3(age);
+static int32_t weekKeyForDayKey(int32_t dayKey) {
+  return (dayKey + 3) / 7;
 }
 
-static time_t shiftMonth(time_t now, int16_t offset) {
-  struct tm* tm = gmtime(&now);
-  if (tm == nullptr) {
-    return 0;
-  }
-  int year = tm->tm_year + 1900;
-  int month = tm->tm_mon - offset;
-  while (month < 0) {
-    month += 12;
-    year--;
-  }
-  struct tm shifted = *tm;
-  shifted.tm_year = year - 1900;
-  shifted.tm_mon = month;
-  shifted.tm_mday = 1;
-  return mktime(&shifted);
-}
-
-static String formatGraphLabel(time_t now, int16_t offset, char period) {
-  if (now == 0) {
-    return offset == 0 ? String("now") : String(offset);
-  }
-
-  time_t point = now;
-  if (period == 'h') {
-    point = now - ((time_t) offset * 3600);
-  } else if (period == 'd') {
-    point = now - ((time_t) offset * 86400);
-  } else if (period == 'w') {
-    point = now - ((time_t) offset * 7 * 86400);
-  } else if (period == 'm') {
-    point = shiftMonth(now, offset);
-  } else {
-    point = shiftMonth(now, offset * 12);
-  }
-
+static uint8_t weekNumberForDayKey(int32_t dayKey) {
+  time_t point = (time_t) dayKey * 86400;
   struct tm* tm = gmtime(&point);
-  if (tm == nullptr) {
-    return offset == 0 ? String("now") : String(offset);
-  }
-
-  if (period == 'h') {
-    return twoDigits(tm->tm_hour) + String(":00");
-  }
-  if (period == 'd') {
-    return twoDigits(tm->tm_mday) + String("/") + twoDigits(tm->tm_mon + 1);
-  }
-  if (period == 'w') {
-    uint8_t week = (tm->tm_yday / 7) + 1;
-    return String("W") + twoDigits(week);
-  }
-  if (period == 'm') {
-    return String(monthName(tm->tm_mon)) + String(" ") + String((tm->tm_year + 1900) % 100);
-  }
-  return String(tm->tm_year + 1900);
+  return tm == nullptr ? 0 : (uint8_t) (tm->tm_yday / 7 + 1);
 }
 
-static String formatGraphTitle(time_t now, char period) {
-  uint16_t count = graphCount(period);
-  if (now == 0) {
-    if (period == 'h') return F("Last 24 hours");
-    if (period == 'd') return F("Last 90 days");
-    if (period == 'w') return F("Last 156 weeks");
-    if (period == 'm') return F("Last 60 months");
-    return F("Last 10 years");
-  }
+struct GraphContext {
+  char period;
+  uint16_t year;
+  uint8_t month;
+  uint8_t half;
+  uint16_t count;
+  String range;
+};
 
-  time_t start = now;
-  if (period == 'h') start = now - ((time_t) (count - 1) * 3600);
-  else if (period == 'd') start = now - ((time_t) (count - 1) * 86400);
-  else if (period == 'w') start = now - ((time_t) (count - 1) * 7 * 86400);
-  else if (period == 'm') start = shiftMonth(now, count - 1);
-  else start = shiftMonth(now, (count - 1) * 12);
+static uint16_t graphYearFromNow(time_t now) {
+  if (now == 0) return 2026;
+  struct tm* tm = gmtime(&now);
+  return tm == nullptr ? 2026 : (uint16_t) (tm->tm_year + 1900);
+}
 
-  struct tm* startTm = gmtime(&start);
-  struct tm startCopy;
-  if (startTm == nullptr) {
-    return F("History");
-  }
-  startCopy = *startTm;
-  struct tm* endTm = gmtime(&now);
-  if (endTm == nullptr) {
-    return F("History");
-  }
+static uint8_t graphMonthFromNow(time_t now) {
+  if (now == 0) return 1;
+  struct tm* tm = gmtime(&now);
+  return tm == nullptr ? 1 : (uint8_t) (tm->tm_mon + 1);
+}
 
-  if (period == 'h') {
-    return twoDigits(startCopy.tm_mday) + String("/") + twoDigits(startCopy.tm_mon + 1) + String(" ")
-         + twoDigits(startCopy.tm_hour) + String(":00 - ")
-         + twoDigits(endTm->tm_mday) + String("/") + twoDigits(endTm->tm_mon + 1) + String(" ")
-         + twoDigits(endTm->tm_hour) + String(":00");
+static uint16_t graphArgYear(const String& value, uint16_t fallback) {
+  int parsed = value.toInt();
+  return parsed >= 2000 && parsed <= 2099 ? (uint16_t) parsed : fallback;
+}
+
+static uint8_t graphArgByte(const String& value, uint8_t fallback, uint8_t minValue, uint8_t maxValue) {
+  int parsed = value.toInt();
+  return parsed >= minValue && parsed <= maxValue ? (uint8_t) parsed : fallback;
+}
+
+static GraphContext makeGraphContext(char period, time_t now, const String& yearArg, const String& monthArg, const String& halfArg) {
+  GraphContext ctx;
+  ctx.period = period;
+  ctx.year = graphArgYear(yearArg, graphYearFromNow(now));
+  ctx.month = graphArgByte(monthArg, graphMonthFromNow(now), 1, 12);
+  ctx.half = graphArgByte(halfArg, graphMonthFromNow(now) <= 6 ? 1 : 2, 1, 2);
+  if (period == 'd') {
+    ctx.count = daysInMonth(ctx.year, ctx.month);
+    ctx.range = String(monthName(ctx.month - 1)) + String(" ") + String(ctx.year);
+  } else if (period == 'w') {
+    ctx.count = 26;
+    ctx.range = (ctx.half == 1 ? String("Jan - Jun ") : String("Jul - Dec ")) + String(ctx.year);
+  } else if (period == 'm') {
+    ctx.count = 12;
+    ctx.range = String(ctx.year);
+  } else if (period == 'h') {
+    ctx.count = 24;
+    ctx.range = F("Last 24 hours");
+  } else {
+    ctx.count = 10;
+    ctx.range = F("Last 10 years");
   }
-  if (period == 'd' || period == 'w') {
-    return twoDigits(startCopy.tm_mday) + String("/") + twoDigits(startCopy.tm_mon + 1) + String("/") + String(startCopy.tm_year + 1900)
-         + String(" - ") + twoDigits(endTm->tm_mday) + String("/") + twoDigits(endTm->tm_mon + 1) + String("/") + String(endTm->tm_year + 1900);
+  return ctx;
+}
+
+static uint32_t graphValueAt(WaterHistory& history, const GraphContext& ctx, uint16_t index) {
+  if (ctx.period == 'h') {
+    return history.getHourMilliM3(ctx.count - 1 - index);
   }
-  if (period == 'm') {
-    return String(monthName(startCopy.tm_mon)) + String(" ") + String(startCopy.tm_year + 1900)
-         + String(" - ") + String(monthName(endTm->tm_mon)) + String(" ") + String(endTm->tm_year + 1900);
+  if (ctx.period == 'd') {
+    int32_t age = history.currentDayKey() - dayKeyForDate(ctx.year, ctx.month, index + 1);
+    return age >= 0 ? history.getDayMilliM3((uint16_t) age) : 0;
   }
-  return String(startCopy.tm_year + 1900) + String(" - ") + String(endTm->tm_year + 1900);
+  if (ctx.period == 'w') {
+    uint8_t startMonth = ctx.half == 1 ? 1 : 7;
+    int32_t targetWeekKey = weekKeyForDayKey(dayKeyForDate(ctx.year, startMonth, 1)) + index;
+    int32_t age = history.currentWeekKey() - targetWeekKey;
+    return age >= 0 ? history.getWeekMilliM3((uint16_t) age) : 0;
+  }
+  if (ctx.period == 'm') {
+    int32_t targetMonthKey = (int32_t) ctx.year * 12 + index;
+    int32_t age = history.currentMonthKey() - targetMonthKey;
+    return age >= 0 && age < 72 ? history.getMonthMilliM3((uint8_t) age) : 0;
+  }
+  return history.getYearMilliM3(ctx.count - 1 - index);
+}
+
+static String graphLabelAt(const GraphContext& ctx, uint16_t index) {
+  if (ctx.period == 'h') {
+    return String("-") + String((ctx.count - 1 - index)) + String("h");
+  }
+  if (ctx.period == 'd') {
+    return String(index + 1);
+  }
+  if (ctx.period == 'w') {
+    uint8_t startMonth = ctx.half == 1 ? 1 : 7;
+    int32_t weekDayKey = dayKeyForDate(ctx.year, startMonth, 1) + ((int32_t) index * 7);
+    return String("W") + twoDigits(weekNumberForDayKey(weekDayKey));
+  }
+  if (ctx.period == 'm') {
+    return String(monthName(index));
+  }
+  return String(ctx.year - (ctx.count - 1 - index));
 }
 
 static String graphAverageLabel(char period, uint16_t count) {
@@ -389,25 +388,25 @@ static String graphAverageLabel(char period, uint16_t count) {
   return String(count) + String(" years");
 }
 
-static String graphBars(WaterHistory& history, char period, time_t now) {
-  const uint16_t count = graphCount(period);
+static String graphBars(WaterHistory& history, const GraphContext& ctx) {
+  const uint16_t count = ctx.count;
   uint32_t maxValue = 0;
   uint32_t minValue = 0;
   uint32_t totalValue = 0;
   uint16_t activeCount = 0;
-  uint16_t maxAge = 0;
-  uint16_t minAge = 0;
+  uint16_t maxIndex = 0;
+  uint16_t minIndex = 0;
   for (uint16_t i = 0; i < count; i++) {
-    uint32_t value = graphValue(history, period, i);
+    uint32_t value = graphValueAt(history, ctx, i);
     totalValue += value;
     if (value > maxValue) {
       maxValue = value;
-      maxAge = i;
+      maxIndex = i;
     }
     if (value > 0) {
       if (minValue == 0 || value < minValue) {
         minValue = value;
-        minAge = i;
+        minIndex = i;
       }
       activeCount++;
     }
@@ -421,10 +420,10 @@ static String graphBars(WaterHistory& history, char period, time_t now) {
   out += F(" m3</strong></span><span>Peak <strong>");
   out += formatM3(maxValue);
   out += F(" m3</strong></span></div><div class=\"bars\">");
-  for (int16_t i = count - 1; i >= 0; i--) {
-    uint32_t value = graphValue(history, period, i);
+  for (uint16_t i = 0; i < count; i++) {
+    uint32_t value = graphValueAt(history, ctx, i);
     uint8_t height = value == 0 || maxValue == 0 ? 0 : (uint8_t) max(4UL, (unsigned long) value * 100UL / maxValue);
-    String label = formatGraphLabel(now, i, period);
+    String label = graphLabelAt(ctx, i);
     out += F("<i class=\"barwrap\" title=\"");
     out += label;
     out += F(": ");
@@ -440,19 +439,19 @@ static String graphBars(WaterHistory& history, char period, time_t now) {
   out += F("</div><div class=\"graphStats\"><article><b>Total</b><strong>");
   out += formatM3(totalValue);
   out += F(" m3</strong><small>");
-  out += formatGraphTitle(now, period);
+  out += ctx.range;
   out += F("</small></article><article><b>Average</b><strong>");
   out += formatM3(averageValue);
   out += F(" m3</strong><small>");
-  out += graphAverageLabel(period, activeCount);
+  out += graphAverageLabel(ctx.period, activeCount);
   out += F("</small></article><article><b>Minimum</b><strong>");
   out += minValue > 0 ? formatM3(minValue) : String("0.000");
   out += F(" m3</strong><small>");
-  out += minValue > 0 ? formatGraphLabel(now, minAge, period) : String("-");
+  out += minValue > 0 ? graphLabelAt(ctx, minIndex) : String("-");
   out += F("</small></article><article><b>Maximum</b><strong>");
   out += formatM3(maxValue);
   out += F(" m3</strong><small>");
-  out += maxValue > 0 ? formatGraphLabel(now, maxAge, period) : String("-");
+  out += maxValue > 0 ? graphLabelAt(ctx, maxIndex) : String("-");
   out += F("</small></article></div>");
   return out;
 }
@@ -533,6 +532,97 @@ static String graphTab(char period, char selected, const char* label) {
   out += F("\">");
   out += label;
   out += F("</a>");
+  return out;
+}
+
+static String graphUrl(char period, uint16_t year, uint8_t month, uint8_t half) {
+  String out = F("/graphs?view=");
+  out += period;
+  if (period == 'd') {
+    out += F("&year=");
+    out += String(year);
+    out += F("&month=");
+    out += String(month);
+  } else if (period == 'w') {
+    out += F("&year=");
+    out += String(year);
+    out += F("&half=");
+    out += String(half);
+  } else if (period == 'm') {
+    out += F("&year=");
+    out += String(year);
+  }
+  return out;
+}
+
+static String graphOption(uint16_t value, uint16_t selected, const String& label) {
+  String out;
+  out += F("<option value=\"");
+  out += String(value);
+  out += F("\"");
+  if (value == selected) {
+    out += F(" selected");
+  }
+  out += F(">");
+  out += label;
+  out += F("</option>");
+  return out;
+}
+
+static String graphControls(const GraphContext& ctx, uint16_t currentYear) {
+  if (ctx.period == 'h' || ctx.period == 'y') {
+    return String();
+  }
+
+  String out;
+  out += F("<form class=\"graphControls\" method=\"get\" action=\"/graphs\"><input type=\"hidden\" name=\"view\" value=\"");
+  out += ctx.period;
+  out += F("\">");
+  out += F("<a class=\"periodNav\" href=\"");
+  if (ctx.period == 'd') {
+    uint16_t prevYear = ctx.month == 1 ? ctx.year - 1 : ctx.year;
+    uint8_t prevMonth = ctx.month == 1 ? 12 : ctx.month - 1;
+    uint16_t nextYear = ctx.month == 12 ? ctx.year + 1 : ctx.year;
+    uint8_t nextMonth = ctx.month == 12 ? 1 : ctx.month + 1;
+    out += graphUrl('d', prevYear, prevMonth, 1);
+    out += F("\">Previous month</a><label>Month<select name=\"month\">");
+    for (uint8_t month = 1; month <= 12; month++) {
+      out += graphOption(month, ctx.month, monthName(month - 1));
+    }
+    out += F("</select></label><label>Year<select name=\"year\">");
+    for (uint16_t year = currentYear >= 5 ? currentYear - 5 : currentYear; year <= currentYear + 1; year++) {
+      out += graphOption(year, ctx.year, String(year));
+    }
+    out += F("</select></label><a class=\"periodNav\" href=\"");
+    out += graphUrl('d', nextYear, nextMonth, 1);
+    out += F("\">Next month</a>");
+  } else if (ctx.period == 'w') {
+    uint16_t prevYear = ctx.half == 1 ? ctx.year - 1 : ctx.year;
+    uint8_t prevHalf = ctx.half == 1 ? 2 : 1;
+    uint16_t nextYear = ctx.half == 2 ? ctx.year + 1 : ctx.year;
+    uint8_t nextHalf = ctx.half == 2 ? 1 : 2;
+    out += graphUrl('w', prevYear, 1, prevHalf);
+    out += F("\">Previous half-year</a><label>Half-year<select name=\"half\">");
+    out += graphOption(1, ctx.half, F("Jan - Jun"));
+    out += graphOption(2, ctx.half, F("Jul - Dec"));
+    out += F("</select></label><label>Year<select name=\"year\">");
+    for (uint16_t year = currentYear >= 5 ? currentYear - 5 : currentYear; year <= currentYear + 1; year++) {
+      out += graphOption(year, ctx.year, String(year));
+    }
+    out += F("</select></label><a class=\"periodNav\" href=\"");
+    out += graphUrl('w', nextYear, 1, nextHalf);
+    out += F("\">Next half-year</a>");
+  } else if (ctx.period == 'm') {
+    out += graphUrl('m', ctx.year - 1, 1, 1);
+    out += F("\">Previous year</a><label>Year<select name=\"year\">");
+    for (uint16_t year = currentYear >= 5 ? currentYear - 5 : currentYear; year <= currentYear + 1; year++) {
+      out += graphOption(year, ctx.year, String(year));
+    }
+    out += F("</select></label><a class=\"periodNav\" href=\"");
+    out += graphUrl('m', ctx.year + 1, 1, 1);
+    out += F("\">Next year</a>");
+  }
+  out += F("<button type=\"submit\">Show</button></form>");
   return out;
 }
 
@@ -821,8 +911,10 @@ void AppWebServer::handleSetupPage() {
 void AppWebServer::handleGraphsPage() {
   time_t now = localTimeNow(config.data().timezoneOffsetMinutes);
   char period = selectedGraphPeriod(server.arg("view"));
+  uint16_t currentYear = graphYearFromNow(now);
+  GraphContext graph = makeGraphContext(period, now, server.arg("year"), server.arg("month"), server.arg("half"));
   String body;
-  body.reserve(900 + graphCount(period) * 96);
+  body.reserve(1500 + graph.count * 120);
   body += F("<section class=\"graphPanel\"><div class=\"tabs\">");
   body += graphTab('h', period, "Hours");
   body += graphTab('d', period, "Days");
@@ -833,9 +925,10 @@ void AppWebServer::handleGraphsPage() {
   body += F("</div><div class=\"sectionHead\"><h2>");
   body += graphTitle(period);
   body += F("</h2><span>");
-  body += formatGraphTitle(now, period);
+  body += graph.range;
   body += F("</span></div>");
-  body += graphBars(history, period, now);
+  body += graphControls(graph, currentYear);
+  body += graphBars(history, graph);
   body += F("</section>");
   sendHtml(body);
 }
@@ -1612,7 +1705,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F(".uploadForm{margin-top:14px}.hint{color:#52606d;font-size:13px;margin:12px 0 0}");
   html += F(".hero{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:18px;align-items:center;background:#0b3d63;color:white;border-color:#0b3d63}.hero h2{font-size:28px;margin:0 0 8px}.eyebrow{margin:0 0 6px;color:#bae6fd;font-size:12px;font-weight:800;text-transform:uppercase}.heroText{margin:0;color:#e0f2fe;white-space:pre-line}.heroAction{margin:10px 0 0}.heroAction:empty{display:none}.heroAction a{display:inline-flex;color:white;background:#0284c7;text-decoration:none;border-radius:5px;padding:7px 10px;font-weight:800;font-size:12px}.heroMeter{border:1px solid #3b82a8;border-radius:8px;padding:14px;background:#082f49}.heroMeter span,.heroMeter small{display:block;color:#bae6fd}.heroMeter strong{display:block;font-size:34px;line-height:1.1;margin:4px 0}");
   html += F(".cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;background:transparent;border:0;padding:0}.card{background:white;border:1px solid #d9e2ec;border-left:5px solid #0284c7;border-radius:8px;padding:14px;min-height:108px;display:grid;gap:10px}.cardTop{display:flex;justify-content:space-between;gap:8px;align-items:center}.cardTop span{font-size:12px;color:#52606d;font-weight:800;text-transform:uppercase}.card strong{font-size:22px;line-height:1.15;overflow-wrap:anywhere}.card small{color:#52606d;overflow-wrap:anywhere}.card a{font-size:22px;font-weight:800}.chip{border-radius:999px;padding:4px 8px;font-size:11px;color:white;white-space:nowrap}.ok{background:#0284c7}.warn{background:#b7791f}.off{background:#64748b}.accentRx{border-left-color:#0ea5e9}.accentWater{border-left-color:#0284c7}.accentUsage{border-left-color:#38bdf8}.accentDaily{border-left-color:#2563eb}.accentWeekly{border-left-color:#0369a1}.accentWifi{border-left-color:#0ea5e9}.accentMqtt{border-left-color:#2563eb}.accentTime{border-left-color:#0284c7}.accentMeter{border-left-color:#0369a1}.accentVersion{border-left-color:#0c4a6e}");
-  html += F(".sectionHead{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin:0 0 10px}.sectionHead h2{margin:0}.sectionHead span{color:#52606d;font-size:12px;font-weight:700;text-transform:uppercase}.graphPanel{padding-bottom:18px}.chartMeta{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px}.chartMeta span{background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:7px 9px;color:#52606d;font-size:12px}.chartMeta strong{color:#082f49}.graphStats{display:grid;grid-template-columns:repeat(4,minmax(0,220px));gap:10px;justify-content:center;margin:18px auto 0}.graphStats article{border:1px solid #cbd5e1;border-radius:6px;overflow:hidden;text-align:center;background:#f8fafc}.graphStats b{display:block;background:#334155;color:white;padding:9px 10px;font-size:14px}.graphStats strong{display:block;font-size:18px;padding:12px 10px 4px}.graphStats small{display:block;color:#52606d;font-weight:700;padding:0 10px 12px}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}.tab{border:1px solid #93c5fd;background:#f0f9ff;color:#082f49;text-decoration:none;border-radius:6px;padding:8px 10px;font-weight:800;font-size:13px}.tab.active{background:#0284c7;border-color:#0284c7;color:white}");
+  html += F(".sectionHead{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin:0 0 10px}.sectionHead h2{margin:0}.sectionHead span{color:#52606d;font-size:12px;font-weight:700;text-transform:uppercase}.graphPanel{padding-bottom:18px}.chartMeta{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px}.chartMeta span{background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:7px 9px;color:#52606d;font-size:12px}.chartMeta strong{color:#082f49}.graphControls{display:flex;grid-template-columns:none;gap:10px;align-items:end;flex-wrap:wrap;margin:0 0 12px;background:#f8fafc;border:1px solid #d9e2ec;border-radius:7px;padding:10px}.graphControls label{min-width:150px}.periodNav{border:1px solid #bae6fd;background:white;border-radius:6px;padding:10px 12px;text-decoration:none;font-weight:800;color:#0369a1}.graphStats{display:grid;grid-template-columns:repeat(4,minmax(0,220px));gap:10px;justify-content:center;margin:18px auto 0}.graphStats article{border:1px solid #cbd5e1;border-radius:6px;overflow:hidden;text-align:center;background:#f8fafc}.graphStats b{display:block;background:#334155;color:white;padding:9px 10px;font-size:14px}.graphStats strong{display:block;font-size:18px;padding:12px 10px 4px}.graphStats small{display:block;color:#52606d;font-weight:700;padding:0 10px 12px}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}.tab{border:1px solid #93c5fd;background:#f0f9ff;color:#082f49;text-decoration:none;border-radius:6px;padding:8px 10px;font-weight:800;font-size:13px}.tab.active{background:#0284c7;border-color:#0284c7;color:white}");
   html += F(".setupPanel{border-left:5px solid #0284c7}.setupForm{display:block}.formError{border:1px solid #f5c2c7;border-left:5px solid #c92a2a;background:#fff5f5;border-radius:7px;padding:10px;margin:0 0 12px;display:grid;gap:3px;color:#7f1d1d}.formError strong{color:#7f1d1d}.setupCard{border:1px solid #d9e2ec;border-left:5px solid #0284c7;border-radius:8px;background:#f8fcff;padding:14px;margin:0 0 14px}.setupCard h3{font-size:16px;margin:0 0 6px;color:#082f49}.setupCard p{margin:0 0 12px;color:#52606d;font-size:13px}.formGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.formHint{grid-column:1/-1;color:#52606d;font-size:12px}.actionRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.actionRow form{display:block}.actionRow button{min-width:170px}.statusLine{border:1px solid #bae6fd;border-radius:6px;padding:10px;background:white;display:grid;gap:4px;color:#52606d}.statusLine strong{color:#082f49}.statusLine small{font-size:12px;color:#64748b}.deviceActions{border-left-color:#075985}.onboardingPanel{border-color:#0284c7;background:#f0f9ff}.onboardingPanel .sectionHead h2{font-size:24px}");
   html += F(".wifiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.wifiResult{display:none;border:1px solid #bae6fd;border-left:5px solid #0284c7;border-radius:8px;background:white;padding:12px;margin:10px 0 0;color:#334e68}.wifiResult.show{display:grid;gap:5px}.wifiResult strong{display:block;color:#082f49;font-size:24px;line-height:1.2;overflow-wrap:anywhere}.wifiResult small{font-size:13px;color:#52606d}.wifiResult.ok{border-left-color:#0284c7}.wifiResult.warn{border-left-color:#b7791f}.wifiResult.error{border-left-color:#c92a2a}.wifiList{grid-column:1/-1;display:grid;gap:6px;margin-top:10px}.wifiNet{display:flex;justify-content:space-between;gap:10px;border:1px solid #d9e2ec;border-radius:6px;padding:8px;background:#f8fafc;cursor:pointer}.wifiNet small{color:#52606d}");
   html += F(".bars{height:260px;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(18px,1fr);gap:4px;align-items:end;border-bottom:3px solid #1f2937;padding:16px 12px 0;overflow-x:auto;overflow-y:hidden;background:repeating-linear-gradient(to top,#f1f5f9 0,#f1f5f9 64px,#cbd5e1 65px,#f1f5f9 66px)}");
