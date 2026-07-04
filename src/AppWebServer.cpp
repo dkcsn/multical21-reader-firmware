@@ -829,6 +829,7 @@ void AppWebServer::handleGraphsPage() {
   body += graphTab('w', period, "Weeks");
   body += graphTab('m', period, "Months");
   body += graphTab('y', period, "Years");
+  body += F("<a class=\"tab importTab\" href=\"/history-import\">Import CSV</a>");
   body += F("</div><div class=\"sectionHead\"><h2>");
   body += graphTitle(period);
   body += F("</h2><span>");
