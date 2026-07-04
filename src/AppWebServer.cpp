@@ -381,28 +381,49 @@ static String formatGraphTitle(time_t now, char period) {
   return String(startCopy.tm_year + 1900) + String(" - ") + String(endTm->tm_year + 1900);
 }
 
+static String graphAverageLabel(char period, uint16_t count) {
+  if (period == 'h') return F("active hours");
+  if (period == 'd') return F("active days");
+  if (period == 'w') return F("active weeks");
+  if (period == 'm') return F("active months");
+  return String(count) + String(" years");
+}
+
 static String graphBars(WaterHistory& history, char period, time_t now) {
   const uint16_t count = graphCount(period);
   uint32_t maxValue = 0;
+  uint32_t minValue = 0;
   uint32_t totalValue = 0;
+  uint16_t activeCount = 0;
+  uint16_t maxAge = 0;
+  uint16_t minAge = 0;
   for (uint16_t i = 0; i < count; i++) {
     uint32_t value = graphValue(history, period, i);
     totalValue += value;
     if (value > maxValue) {
       maxValue = value;
+      maxAge = i;
+    }
+    if (value > 0) {
+      if (minValue == 0 || value < minValue) {
+        minValue = value;
+        minAge = i;
+      }
+      activeCount++;
     }
   }
+  uint32_t averageValue = activeCount > 0 ? (totalValue + (activeCount / 2)) / activeCount : 0;
 
   String out;
-  out.reserve(220 + count * 92);
-  out += F("<div class=\"graphSummary\"><span>Total <strong>");
+  out.reserve(560 + count * 116);
+  out += F("<div class=\"chartMeta\"><span>Total <strong>");
   out += formatM3(totalValue);
   out += F(" m3</strong></span><span>Peak <strong>");
   out += formatM3(maxValue);
   out += F(" m3</strong></span></div><div class=\"bars\">");
   for (int16_t i = count - 1; i >= 0; i--) {
     uint32_t value = graphValue(history, period, i);
-    uint8_t height = value == 0 || maxValue == 0 ? 0 : (uint8_t) max(6UL, (unsigned long) value * 100UL / maxValue);
+    uint8_t height = value == 0 || maxValue == 0 ? 0 : (uint8_t) max(4UL, (unsigned long) value * 100UL / maxValue);
     String label = formatGraphLabel(now, i, period);
     out += F("<i class=\"barwrap\" title=\"");
     out += label;
@@ -416,7 +437,23 @@ static String graphBars(WaterHistory& history, char period, time_t now) {
     out += formatM3(value);
     out += F("</small></i>");
   }
-  out += F("</div>");
+  out += F("</div><div class=\"graphStats\"><article><b>Total</b><strong>");
+  out += formatM3(totalValue);
+  out += F(" m3</strong><small>");
+  out += formatGraphTitle(now, period);
+  out += F("</small></article><article><b>Average</b><strong>");
+  out += formatM3(averageValue);
+  out += F(" m3</strong><small>");
+  out += graphAverageLabel(period, activeCount);
+  out += F("</small></article><article><b>Minimum</b><strong>");
+  out += minValue > 0 ? formatM3(minValue) : String("0.000");
+  out += F(" m3</strong><small>");
+  out += minValue > 0 ? formatGraphLabel(now, minAge, period) : String("-");
+  out += F("</small></article><article><b>Maximum</b><strong>");
+  out += formatM3(maxValue);
+  out += F(" m3</strong><small>");
+  out += maxValue > 0 ? formatGraphLabel(now, maxAge, period) : String("-");
+  out += F("</small></article></div>");
   return out;
 }
 
@@ -1574,15 +1611,15 @@ void AppWebServer::sendHtml(const String& body) {
   html += F(".uploadForm{margin-top:14px}.hint{color:#52606d;font-size:13px;margin:12px 0 0}");
   html += F(".hero{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:18px;align-items:center;background:#0b3d63;color:white;border-color:#0b3d63}.hero h2{font-size:28px;margin:0 0 8px}.eyebrow{margin:0 0 6px;color:#bae6fd;font-size:12px;font-weight:800;text-transform:uppercase}.heroText{margin:0;color:#e0f2fe;white-space:pre-line}.heroAction{margin:10px 0 0}.heroAction:empty{display:none}.heroAction a{display:inline-flex;color:white;background:#0284c7;text-decoration:none;border-radius:5px;padding:7px 10px;font-weight:800;font-size:12px}.heroMeter{border:1px solid #3b82a8;border-radius:8px;padding:14px;background:#082f49}.heroMeter span,.heroMeter small{display:block;color:#bae6fd}.heroMeter strong{display:block;font-size:34px;line-height:1.1;margin:4px 0}");
   html += F(".cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;background:transparent;border:0;padding:0}.card{background:white;border:1px solid #d9e2ec;border-left:5px solid #0284c7;border-radius:8px;padding:14px;min-height:108px;display:grid;gap:10px}.cardTop{display:flex;justify-content:space-between;gap:8px;align-items:center}.cardTop span{font-size:12px;color:#52606d;font-weight:800;text-transform:uppercase}.card strong{font-size:22px;line-height:1.15;overflow-wrap:anywhere}.card small{color:#52606d;overflow-wrap:anywhere}.card a{font-size:22px;font-weight:800}.chip{border-radius:999px;padding:4px 8px;font-size:11px;color:white;white-space:nowrap}.ok{background:#0284c7}.warn{background:#b7791f}.off{background:#64748b}.accentRx{border-left-color:#0ea5e9}.accentWater{border-left-color:#0284c7}.accentUsage{border-left-color:#38bdf8}.accentDaily{border-left-color:#2563eb}.accentWeekly{border-left-color:#0369a1}.accentWifi{border-left-color:#0ea5e9}.accentMqtt{border-left-color:#2563eb}.accentTime{border-left-color:#0284c7}.accentMeter{border-left-color:#0369a1}.accentVersion{border-left-color:#0c4a6e}");
-  html += F(".sectionHead{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin:0 0 10px}.sectionHead h2{margin:0}.sectionHead span{color:#52606d;font-size:12px;font-weight:700;text-transform:uppercase}.graphPanel{padding-bottom:12px}.graphSummary{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px}.graphSummary span{background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:7px 9px;color:#52606d;font-size:12px}.graphSummary strong{color:#082f49}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}.tab{border:1px solid #93c5fd;background:#f0f9ff;color:#082f49;text-decoration:none;border-radius:6px;padding:8px 10px;font-weight:800;font-size:13px}.tab.active{background:#0284c7;border-color:#0284c7;color:white}");
+  html += F(".sectionHead{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin:0 0 10px}.sectionHead h2{margin:0}.sectionHead span{color:#52606d;font-size:12px;font-weight:700;text-transform:uppercase}.graphPanel{padding-bottom:18px}.chartMeta{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px}.chartMeta span{background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:7px 9px;color:#52606d;font-size:12px}.chartMeta strong{color:#082f49}.graphStats{display:grid;grid-template-columns:repeat(4,minmax(0,220px));gap:10px;justify-content:center;margin:18px auto 0}.graphStats article{border:1px solid #cbd5e1;border-radius:6px;overflow:hidden;text-align:center;background:#f8fafc}.graphStats b{display:block;background:#334155;color:white;padding:9px 10px;font-size:14px}.graphStats strong{display:block;font-size:18px;padding:12px 10px 4px}.graphStats small{display:block;color:#52606d;font-weight:700;padding:0 10px 12px}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}.tab{border:1px solid #93c5fd;background:#f0f9ff;color:#082f49;text-decoration:none;border-radius:6px;padding:8px 10px;font-weight:800;font-size:13px}.tab.active{background:#0284c7;border-color:#0284c7;color:white}");
   html += F(".setupPanel{border-left:5px solid #0284c7}.setupForm{display:block}.formError{border:1px solid #f5c2c7;border-left:5px solid #c92a2a;background:#fff5f5;border-radius:7px;padding:10px;margin:0 0 12px;display:grid;gap:3px;color:#7f1d1d}.formError strong{color:#7f1d1d}.setupCard{border:1px solid #d9e2ec;border-left:5px solid #0284c7;border-radius:8px;background:#f8fcff;padding:14px;margin:0 0 14px}.setupCard h3{font-size:16px;margin:0 0 6px;color:#082f49}.setupCard p{margin:0 0 12px;color:#52606d;font-size:13px}.formGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.formHint{grid-column:1/-1;color:#52606d;font-size:12px}.actionRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.actionRow form{display:block}.actionRow button{min-width:170px}.statusLine{border:1px solid #bae6fd;border-radius:6px;padding:10px;background:white;display:grid;gap:4px;color:#52606d}.statusLine strong{color:#082f49}.statusLine small{font-size:12px;color:#64748b}.deviceActions{border-left-color:#075985}.onboardingPanel{border-color:#0284c7;background:#f0f9ff}.onboardingPanel .sectionHead h2{font-size:24px}");
   html += F(".wifiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.wifiResult{display:none;border:1px solid #bae6fd;border-left:5px solid #0284c7;border-radius:8px;background:white;padding:12px;margin:10px 0 0;color:#334e68}.wifiResult.show{display:grid;gap:5px}.wifiResult strong{display:block;color:#082f49;font-size:24px;line-height:1.2;overflow-wrap:anywhere}.wifiResult small{font-size:13px;color:#52606d}.wifiResult.ok{border-left-color:#0284c7}.wifiResult.warn{border-left-color:#b7791f}.wifiResult.error{border-left-color:#c92a2a}.wifiList{grid-column:1/-1;display:grid;gap:6px;margin-top:10px}.wifiNet{display:flex;justify-content:space-between;gap:10px;border:1px solid #d9e2ec;border-radius:6px;padding:8px;background:#f8fafc;cursor:pointer}.wifiNet small{color:#52606d}");
-  html += F(".bars{height:180px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden;background:linear-gradient(to top,#f8fafc,#fff)}");
-  html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:10px;font-style:normal}.bar{align-self:end;background:#0284c7;border-radius:4px 4px 0 0}.barwrap:nth-child(2n) .bar{background:#0ea5e9}.barwrap small{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
+  html += F(".bars{height:260px;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(18px,1fr);gap:4px;align-items:end;border-bottom:3px solid #1f2937;padding:16px 12px 0;overflow-x:auto;overflow-y:hidden;background:repeating-linear-gradient(to top,#f1f5f9 0,#f1f5f9 64px,#cbd5e1 65px,#f1f5f9 66px)}");
+  html += F(".barwrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:4px;min-width:0;text-align:center;color:#52606d;font-size:10px;font-style:normal}.bar{align-self:end;background:#174a7c;border-radius:2px 2px 0 0}.barwrap small{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#334155}.barwrap span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.barwrap[title$='0.000 m3'] .bar{background:transparent}.barwrap[title$='0.000 m3'] small{color:#94a3b8}");
   html += F(".minutePanel{padding-bottom:12px}.minuteBars{height:176px;display:grid;grid-template-columns:repeat(30,1fr);gap:3px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden;background:linear-gradient(to top,#f8fafc,#fff)}.minuteWrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:9px;font-style:normal}.minuteBar{align-self:end;background:#0284c7;border-radius:3px 3px 0 0;min-height:0}.minuteWrap:nth-child(2n) .minuteBar{background:#0ea5e9}.minuteWrap span{white-space:nowrap;overflow:hidden;text-overflow:clip}.minuteLiters{font-weight:700;color:#082f49}.minuteAge{color:#52606d}");
   html += F(".pinTable{width:100%;border-collapse:collapse}.pinTable th,.pinTable td{border-bottom:1px solid #d9e2ec;text-align:left;padding:9px;font-size:13px}.pinTable th{color:#52606d;text-transform:uppercase;font-size:11px}.wireDiagram{display:grid;grid-template-columns:max-content max-content max-content;gap:16px;align-items:start;overflow:auto}.wireDiagram h3{font-size:14px;margin:0 0 8px;color:#102a43}.wireDiagram code{display:block;line-height:1.8;background:#f8fafc;border:1px solid #d9e2ec;border-radius:6px;padding:10px;white-space:nowrap}.wireLines{display:grid;gap:0;margin-top:28px;color:#0b7285;font-weight:900;line-height:1.8}");
   html += F(".setupTabs{margin:-2px 0 14px}.ccModule{display:grid;grid-template-columns:max-content 220px max-content;gap:12px;align-items:stretch;overflow:auto}.ccPins{display:grid;grid-template-rows:repeat(8,1fr);gap:4px}.ccPins span,.ccAntenna span{min-width:68px;padding:6px 8px;background:#f8fafc;border:1px solid #d9e2ec;border-radius:5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800}.ccBoard{border:2px solid #147d64;background:#e6fcf5;border-radius:6px;display:grid;place-items:center;text-align:center;color:#0b7285;min-height:260px}.ccBoard strong{font-size:22px;line-height:1.35}.ccAntenna{display:grid;grid-template-rows:max-content max-content max-content 1fr;gap:6px;align-content:center}.ccAntenna i{display:block;width:40px;height:72px;border:4px solid #c2410c;border-left:0;border-bottom:0;border-radius:0 32px 0 0;margin:8px auto 0}.wiringCards{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}.boardMap{border:1px solid #d9e2ec;border-radius:8px;padding:12px;background:#f8fafc}.boardMap h3{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:0 0 10px;font-size:14px;color:#102a43}.boardMap h3 span{border:1px solid #bcccdc;background:white;border-radius:5px;padding:5px 7px}.boardMap h3 b{color:#52606d;font-size:12px;text-transform:uppercase}.boardMap table{width:100%;border-collapse:collapse}.boardMap th,.boardMap td{text-align:left;border-top:1px solid #d9e2ec;padding:7px 6px;font-size:13px}.boardMap thead th{color:#52606d;text-transform:uppercase;font-size:11px}.boardMap tbody th{width:130px;color:#52606d;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.boardMap td{font-weight:800;color:#102a43}");
-  html += F("@media(max-width:1200px){.cards{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}}@media(max-width:980px){header{align-items:flex-start}.topRight{flex:1 1 100%;justify-content:flex-start}.statusGroup,.navLinks{justify-content:flex-start;flex-wrap:wrap;overflow:visible}.navLinks{border-left:0;padding-left:0;border-top:1px solid #3b82a8;padding-top:8px;width:100%}}@media(max-width:640px){main{padding:12px}.hero{grid-template-columns:1fr}.hero h2{font-size:24px}dl{grid-template-columns:1fr}.heroMeter strong{font-size:30px}nav a span{display:none}.statusPill{min-width:62px}}");
+  html += F("@media(max-width:1200px){.cards{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}.graphStats{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:980px){header{align-items:flex-start}.topRight{flex:1 1 100%;justify-content:flex-start}.statusGroup,.navLinks{justify-content:flex-start;flex-wrap:wrap;overflow:visible}.navLinks{border-left:0;padding-left:0;border-top:1px solid #3b82a8;padding-top:8px;width:100%}}@media(max-width:640px){main{padding:12px}.hero{grid-template-columns:1fr}.hero h2{font-size:24px}dl{grid-template-columns:1fr}.heroMeter strong{font-size:30px}nav a span{display:none}.statusPill{min-width:62px}.bars{height:220px}.graphStats{grid-template-columns:1fr}}");
   html += F("</style></head><body><header><h1>Multical 21 Reader</h1><nav class=\"topRight\"><div class=\"statusGroup\">");
   html += F("<span id=\"topFramePill\" class=\"statusPill ");
   html += !waterData.radioPresent ? F("statusAlarm") : (radioLive ? F("statusOk") : (waterData.valid ? F("statusWarn") : F("statusOff")));
