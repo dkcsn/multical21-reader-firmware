@@ -7,6 +7,7 @@ import csv
 import re
 import zipfile
 import xml.etree.ElementTree as ET
+from datetime import date
 from pathlib import Path
 
 
@@ -90,19 +91,23 @@ def main():
     parser = argparse.ArgumentParser(description="Build date,usage_m3 CSV from supplier XLSX exports.")
     parser.add_argument("input", type=Path, help="Folder with 77513579 monthly .xlsx files")
     parser.add_argument("output", type=Path, help="Output CSV path")
+    parser.add_argument("--include-current", action="store_true", help="Keep today and future-dated rows from current month exports")
     args = parser.parse_args()
 
     daily = {}
+    today = date.today()
     for path in sorted(args.input.glob("77513579 - *.xlsx")):
-        for date, usage in parse_month_file(path):
-            daily[date] = usage
+        for row_date, usage in parse_month_file(path):
+            if not args.include_current and date.fromisoformat(row_date) >= today:
+                continue
+            daily[row_date] = usage
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["date", "usage_m3"])
-        for date in sorted(daily):
-            writer.writerow([date, f"{daily[date]:.3f}"])
+        for row_date in sorted(daily):
+            writer.writerow([row_date, f"{daily[row_date]:.3f}"])
 
     print(f"Wrote {len(daily)} days to {args.output}")
     print(f"Total {sum(daily.values()):.3f} m3")
