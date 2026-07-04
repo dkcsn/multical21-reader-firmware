@@ -94,6 +94,40 @@ static String formatLiters(uint32_t milliM3) {
   return String(milliM3) + String(" L");
 }
 
+static bool isLeapYear(uint16_t year) {
+  return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+}
+
+static uint8_t daysInMonth(uint16_t year, uint8_t month) {
+  static const uint8_t days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  if (month == 0 || month > 12) {
+    return 0;
+  }
+  if (month == 2 && isLeapYear(year)) {
+    return 29;
+  }
+  return days[month - 1];
+}
+
+static bool isUnsignedDecimal(const String& value) {
+  if (value.length() == 0) {
+    return false;
+  }
+  bool hasDigit = false;
+  bool hasDot = false;
+  for (uint16_t i = 0; i < value.length(); i++) {
+    char c = value[i];
+    if (c >= '0' && c <= '9') {
+      hasDigit = true;
+    } else if (c == '.' && !hasDot) {
+      hasDot = true;
+    } else {
+      return false;
+    }
+  }
+  return hasDigit;
+}
+
 static String meterStatusText(const WaterData& data) {
   if (!data.valid) {
     return F("Meter Waiting");
@@ -229,15 +263,15 @@ static const char* monthName(uint8_t month) {
   return month < 12 ? names[month] : "";
 }
 
-static uint8_t graphCount(char period) {
+static uint16_t graphCount(char period) {
   if (period == 'h') return 24;
-  if (period == 'd') return 31;
-  if (period == 'w') return 53;
-  if (period == 'm') return 24;
+  if (period == 'd') return 90;
+  if (period == 'w') return 156;
+  if (period == 'm') return 60;
   return 10;
 }
 
-static uint32_t graphValue(WaterHistory& history, char period, uint8_t age) {
+static uint32_t graphValue(WaterHistory& history, char period, uint16_t age) {
   if (period == 'h') return history.getHourMilliM3(age);
   if (period == 'd') return history.getDayMilliM3(age);
   if (period == 'w') return history.getWeekMilliM3(age);
@@ -245,7 +279,7 @@ static uint32_t graphValue(WaterHistory& history, char period, uint8_t age) {
   return history.getYearMilliM3(age);
 }
 
-static time_t shiftMonth(time_t now, int8_t offset) {
+static time_t shiftMonth(time_t now, int16_t offset) {
   struct tm* tm = gmtime(&now);
   if (tm == nullptr) {
     return 0;
@@ -263,7 +297,7 @@ static time_t shiftMonth(time_t now, int8_t offset) {
   return mktime(&shifted);
 }
 
-static String formatGraphLabel(time_t now, int8_t offset, char period) {
+static String formatGraphLabel(time_t now, int16_t offset, char period) {
   if (now == 0) {
     return offset == 0 ? String("now") : String(offset);
   }
@@ -303,12 +337,12 @@ static String formatGraphLabel(time_t now, int8_t offset, char period) {
 }
 
 static String formatGraphTitle(time_t now, char period) {
-  uint8_t count = graphCount(period);
+  uint16_t count = graphCount(period);
   if (now == 0) {
     if (period == 'h') return F("Last 24 hours");
-    if (period == 'd') return F("Last 31 days");
-    if (period == 'w') return F("Last 53 weeks");
-    if (period == 'm') return F("Last 24 months");
+    if (period == 'd') return F("Last 90 days");
+    if (period == 'w') return F("Last 156 weeks");
+    if (period == 'm') return F("Last 60 months");
     return F("Last 10 years");
   }
 
@@ -348,10 +382,10 @@ static String formatGraphTitle(time_t now, char period) {
 }
 
 static String graphBars(WaterHistory& history, char period, time_t now) {
-  const uint8_t count = graphCount(period);
+  const uint16_t count = graphCount(period);
   uint32_t maxValue = 0;
   uint32_t totalValue = 0;
-  for (uint8_t i = 0; i < count; i++) {
+  for (uint16_t i = 0; i < count; i++) {
     uint32_t value = graphValue(history, period, i);
     totalValue += value;
     if (value > maxValue) {
@@ -366,7 +400,7 @@ static String graphBars(WaterHistory& history, char period, time_t now) {
   out += F(" m3</strong></span><span>Peak <strong>");
   out += formatM3(maxValue);
   out += F(" m3</strong></span></div><div class=\"bars\">");
-  for (int8_t i = count - 1; i >= 0; i--) {
+  for (int16_t i = count - 1; i >= 0; i--) {
     uint32_t value = graphValue(history, period, i);
     uint8_t height = value == 0 || maxValue == 0 ? 0 : (uint8_t) max(6UL, (unsigned long) value * 100UL / maxValue);
     String label = formatGraphLabel(now, i, period);
@@ -619,7 +653,7 @@ static String buildSetupSection(AppConfig& config, WaterData& waterData, bool on
   out += htmlEscape(deviceIp);
   out += F(" 23 or telnet ");
   out += htmlEscape(deviceIp);
-    out += F(" 23</small></label><div class=\"statusLine\"><span>Diagnostics</span><strong><a href=\"/diagnostics.json\">Download JSON</a></strong><small>No secrets are included.</small></div></div></div>");
+    out += F(" 23</small></label><div class=\"statusLine\"><span>Diagnostics</span><strong><a href=\"/diagnostics.json\">Download JSON</a></strong><small>No secrets are included.</small></div><div class=\"statusLine\"><span>History import</span><strong><a href=\"/history-import\">Upload CSV</a></strong><small>Daily usage CSV: date,usage_m3</small></div></div></div>");
   }
   out += F("<div class=\"actionRow\"><button type=\"submit\">Save settings</button></div></form>");
   if (!wifiTab) {
@@ -634,7 +668,10 @@ static String buildSetupSection(AppConfig& config, WaterData& waterData, bool on
 
 AppWebServer::AppWebServer(AppConfig& config, WaterData& waterData, WaterHistory& history)
   : config(config), waterData(waterData), history(history), server(80),
-    firmwareUploadSuccess(false), firmwareUploadMessage() {
+    firmwareUploadSuccess(false), firmwareUploadMessage(),
+    historyImportSuccess(false), historyImportMessage(), historyImportLine(),
+    historyImportRows(0), historyImportImported(0), historyImportRejected(0),
+    historyImportTotalMilliM3(0) {
 }
 
 void AppWebServer::begin() {
@@ -642,6 +679,8 @@ void AppWebServer::begin() {
   server.on("/setup", HTTP_GET, std::bind(&AppWebServer::handleSetupPage, this));
   server.on("/graphs", HTTP_GET, std::bind(&AppWebServer::handleGraphsPage, this));
   server.on("/hardware", HTTP_GET, std::bind(&AppWebServer::handleHardwarePage, this));
+  server.on("/history-import", HTTP_GET, std::bind(&AppWebServer::handleHistoryImportPage, this));
+  server.on("/history-import", HTTP_POST, std::bind(&AppWebServer::handleHistoryImportPost, this), std::bind(&AppWebServer::handleHistoryImportUpload, this));
   server.on("/firmware", HTTP_GET, std::bind(&AppWebServer::handleFirmwarePage, this));
   server.on("/firmware", HTTP_POST, std::bind(&AppWebServer::handleFirmwarePost, this), std::bind(&AppWebServer::handleFirmwareUpload, this));
   server.on("/configuration.json", HTTP_GET, std::bind(&AppWebServer::handleConfigJson, this));
@@ -949,6 +988,121 @@ void AppWebServer::handleFirmwareUpload() {
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
     Update.end();
     firmwareUploadMessage = F("Upload aborted");
+  }
+}
+
+void AppWebServer::handleHistoryImportPage() {
+  String body;
+  body.reserve(1200);
+  body += F("<section><h2>History import</h2>");
+  body += F("<p class=\"hint\">Import daily water usage from CSV. The device time must be synced before import so dates can be placed in the correct history buckets.</p>");
+  body += F("<dl><dt>Format</dt><dd><code>date,usage_m3</code></dd><dt>Example</dt><dd><code>2025-01-01,0.378</code></dd><dt>NTP status</dt><dd>");
+  body += systemTimeSynced() ? F("Synced") : F("Waiting");
+  body += F("</dd></dl>");
+  body += F("<form class=\"uploadForm\" method=\"post\" action=\"/history-import\" enctype=\"multipart/form-data\">");
+  body += F("<label>Daily history CSV<input name=\"history\" type=\"file\" accept=\".csv,text/csv\" required></label>");
+  body += F("<button type=\"submit\">Import history</button></form>");
+  body += F("<p class=\"hint\">Existing daily values for matching dates are replaced. Weekly, monthly and yearly history is rebuilt from daily values after import.</p>");
+  body += F("</section>");
+  sendHtml(body);
+}
+
+void AppWebServer::handleHistoryImportPost() {
+  String body;
+  body.reserve(1100);
+  body += F("<section><h2>History import</h2><dl><dt>Status</dt><dd>");
+  body += historyImportSuccess ? F("Import complete") : F("Import failed");
+  body += F("</dd><dt>Message</dt><dd>");
+  body += htmlEscape(historyImportMessage);
+  body += F("</dd><dt>Rows read</dt><dd>");
+  body += String(historyImportRows);
+  body += F("</dd><dt>Imported days</dt><dd>");
+  body += String(historyImportImported);
+  body += F("</dd><dt>Rejected rows</dt><dd>");
+  body += String(historyImportRejected);
+  body += F("</dd><dt>Total imported</dt><dd>");
+  body += formatM3(historyImportTotalMilliM3);
+  body += F(" m3</dd></dl><p><a class=\"buttonLink\" href=\"/graphs?view=d\">Open daily graph</a> <a class=\"buttonLink\" href=\"/history-import\">Import another file</a></p></section>");
+  sendHtml(body);
+}
+
+void AppWebServer::processHistoryImportLine(const String& rawLine) {
+  String line = rawLine;
+  line.trim();
+  if (line.length() == 0 || line.startsWith("date") || line.startsWith("Date")) {
+    return;
+  }
+  historyImportRows++;
+  int comma = line.indexOf(',');
+  if (comma < 0 || line.length() < 12) {
+    historyImportRejected++;
+    return;
+  }
+  String date = line.substring(0, comma);
+  String value = line.substring(comma + 1);
+  date.trim();
+  value.trim();
+  if (date.length() != 10 || date.charAt(4) != '-' || date.charAt(7) != '-') {
+    historyImportRejected++;
+    return;
+  }
+  uint16_t year = (uint16_t) date.substring(0, 4).toInt();
+  uint8_t month = (uint8_t) date.substring(5, 7).toInt();
+  uint8_t day = (uint8_t) date.substring(8, 10).toInt();
+  if (year < 2000 || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month) || !isUnsignedDecimal(value)) {
+    historyImportRejected++;
+    return;
+  }
+  float usageM3 = value.toFloat();
+  uint32_t milliM3 = (uint32_t) (usageM3 * 1000.0f + 0.5f);
+  if (history.importDailyUsage(year, month, day, milliM3)) {
+    historyImportImported++;
+    historyImportTotalMilliM3 += milliM3;
+  } else {
+    historyImportRejected++;
+  }
+}
+
+void AppWebServer::handleHistoryImportUpload() {
+  HTTPUpload& upload = server.upload();
+
+  if (upload.status == UPLOAD_FILE_START) {
+    historyImportSuccess = false;
+    historyImportMessage = String("Receiving ") + upload.filename;
+    historyImportLine = "";
+    historyImportRows = 0;
+    historyImportImported = 0;
+    historyImportRejected = 0;
+    historyImportTotalMilliM3 = 0;
+    time_t localNow = localTimeNow(config.data().timezoneOffsetMinutes);
+    if (!history.prepareForImport(localNow)) {
+      historyImportMessage = F("Time is not synced. Wait for NTP before importing dated history.");
+    }
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (historyImportMessage.startsWith("Time is not synced")) {
+      return;
+    }
+    for (size_t i = 0; i < upload.currentSize; i++) {
+      char c = (char) upload.buf[i];
+      if (c == '\n') {
+        processHistoryImportLine(historyImportLine);
+        historyImportLine = "";
+      } else if (c != '\r' && historyImportLine.length() < 80) {
+        historyImportLine += c;
+      }
+    }
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (!historyImportMessage.startsWith("Time is not synced")) {
+      processHistoryImportLine(historyImportLine);
+      historyImportLine = "";
+      history.rebuildAggregatesFromDaily();
+      history.flush();
+      historyImportSuccess = historyImportImported > 0;
+      historyImportMessage = historyImportSuccess ? F("Daily history imported and aggregates rebuilt") : F("No valid daily rows imported");
+    }
+  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    historyImportSuccess = false;
+    historyImportMessage = F("Upload aborted");
   }
 }
 

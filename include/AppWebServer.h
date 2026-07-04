@@ -27,6 +27,13 @@ private:
   DeviceWebServer server;
   bool firmwareUploadSuccess;
   String firmwareUploadMessage;
+  bool historyImportSuccess;
+  String historyImportMessage;
+  String historyImportLine;
+  uint16_t historyImportRows;
+  uint16_t historyImportImported;
+  uint16_t historyImportRejected;
+  uint32_t historyImportTotalMilliM3;
 
   void handleRoot();
   void handleSetupPage();
@@ -35,6 +42,9 @@ private:
   void handleFirmwarePage();
   void handleFirmwarePost();
   void handleFirmwareUpload();
+  void handleHistoryImportPage();
+  void handleHistoryImportPost();
+  void handleHistoryImportUpload();
   void handleConfigJson();
   void handleDataJson();
   void handleDayPlotJson();
@@ -48,6 +58,7 @@ private:
   void handleReboot();
   void handleResetConfig();
   void handleFactoryReset();
+  void processHistoryImportLine(const String& line);
   void sendHtml(const String& body);
 };
 

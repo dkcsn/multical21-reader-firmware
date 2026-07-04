@@ -37,6 +37,21 @@ static int32_t yearKeyFromLocal(time_t localNow) {
   return tm->tm_year + 1900;
 }
 
+static int32_t dayKeyFromDate(uint16_t year, uint8_t month, uint8_t day) {
+  if (month < 1 || month > 12 || day < 1 || day > 31 || year < 2000) {
+    return -1;
+  }
+  int y = year;
+  int m = month;
+  int d = day;
+  y -= m <= 2;
+  const int era = (y >= 0 ? y : y - 399) / 400;
+  const unsigned yoe = (unsigned) (y - era * 400);
+  const unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+  const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return era * 146097 + (int) doe - 719468;
+}
+
 static int32_t mondayWeekKeyFromDayKey(int32_t dayKey) {
   return (dayKey + 3) / 7;
 }
@@ -116,6 +131,69 @@ bool WaterHistory::clear() {
   return true;
 }
 
+bool WaterHistory::prepareForImport(time_t localNow) {
+  if (localNow < VALID_TIME_EPOCH) {
+    return false;
+  }
+  rotateBuckets(localNow);
+  return state.currentDayKey >= 0 && state.currentMonthKey >= 0 && state.currentYearKey >= 0;
+}
+
+bool WaterHistory::importDailyUsage(uint16_t year, uint8_t month, uint8_t day, uint32_t milliM3) {
+  if (state.currentDayKey < 0) {
+    return false;
+  }
+  int32_t dayKey = dayKeyFromDate(year, month, day);
+  if (dayKey < 0 || dayKey > state.currentDayKey) {
+    return false;
+  }
+  int32_t age = state.currentDayKey - dayKey;
+  if (age < 0 || age >= DAY_BUCKETS) {
+    return false;
+  }
+  state.daily[age] = milliM3;
+  dirty = true;
+  return true;
+}
+
+void WaterHistory::rebuildAggregatesFromDaily() {
+  memset(state.weekly, 0, sizeof(state.weekly));
+  memset(state.monthly, 0, sizeof(state.monthly));
+  memset(state.yearly, 0, sizeof(state.yearly));
+  if (state.currentDayKey < 0) {
+    return;
+  }
+  if (state.currentWeekKey < 0) {
+    state.currentWeekKey = mondayWeekKeyFromDayKey(state.currentDayKey);
+  }
+  if (state.currentMonthKey < 0 || state.currentYearKey < 0) {
+    time_t now = (time_t) state.currentDayKey * 86400;
+    state.currentMonthKey = monthKeyFromLocal(now);
+    state.currentYearKey = yearKeyFromLocal(now);
+  }
+  for (uint16_t age = 0; age < DAY_BUCKETS; age++) {
+    uint32_t value = state.daily[age];
+    if (value == 0) {
+      continue;
+    }
+    int32_t dayKey = state.currentDayKey - age;
+    int32_t weekAge = state.currentWeekKey - mondayWeekKeyFromDayKey(dayKey);
+    if (weekAge >= 0 && weekAge < WEEK_BUCKETS) {
+      state.weekly[weekAge] += value;
+    }
+    time_t dayTime = (time_t) dayKey * 86400;
+    int32_t monthAge = state.currentMonthKey - monthKeyFromLocal(dayTime);
+    if (monthAge >= 0 && monthAge < MONTH_BUCKETS) {
+      state.monthly[monthAge] += value;
+    }
+    int32_t yearAge = state.currentYearKey - yearKeyFromLocal(dayTime);
+    if (yearAge >= 0 && yearAge < YEAR_BUCKETS) {
+      state.yearly[yearAge] += value;
+    }
+  }
+  dirty = true;
+}
+
 uint32_t WaterHistory::getHourMilliM3(uint8_t age) const {
   if (age >= HOUR_BUCKETS) {
     return 0;
@@ -130,14 +208,14 @@ uint32_t WaterHistory::getMinuteMilliM3(uint8_t age) const {
   return minute[age];
 }
 
-uint32_t WaterHistory::getDayMilliM3(uint8_t age) const {
+uint32_t WaterHistory::getDayMilliM3(uint16_t age) const {
   if (age >= DAY_BUCKETS) {
     return 0;
   }
   return state.daily[age];
 }
 
-uint32_t WaterHistory::getWeekMilliM3(uint8_t age) const {
+uint32_t WaterHistory::getWeekMilliM3(uint16_t age) const {
   if (age >= WEEK_BUCKETS) {
     return 0;
   }
@@ -185,7 +263,7 @@ uint32_t WaterHistory::getLast24HoursMilliM3() const {
 
 uint32_t WaterHistory::getLast31DaysMilliM3() const {
   uint32_t total = 0;
-  for (uint8_t i = 0; i < DAY_BUCKETS; i++) {
+  for (uint16_t i = 0; i < 31 && i < DAY_BUCKETS; i++) {
     total += state.daily[i];
   }
   return total;
@@ -193,7 +271,7 @@ uint32_t WaterHistory::getLast31DaysMilliM3() const {
 
 uint32_t WaterHistory::getLast53WeeksMilliM3() const {
   uint32_t total = 0;
-  for (uint8_t i = 0; i < WEEK_BUCKETS; i++) {
+  for (uint16_t i = 0; i < 53 && i < WEEK_BUCKETS; i++) {
     total += state.weekly[i];
   }
   return total;
@@ -201,7 +279,7 @@ uint32_t WaterHistory::getLast53WeeksMilliM3() const {
 
 uint32_t WaterHistory::getLast24MonthsMilliM3() const {
   uint32_t total = 0;
-  for (uint8_t i = 0; i < MONTH_BUCKETS; i++) {
+  for (uint8_t i = 0; i < 24 && i < MONTH_BUCKETS; i++) {
     total += state.monthly[i];
   }
   return total;
@@ -248,15 +326,39 @@ bool WaterHistory::load() {
     return false;
   }
 
-  PersistedHistory loadedState;
-  size_t bytes = file.read((uint8_t*) &loadedState, sizeof(loadedState));
-  if (bytes == sizeof(loadedState) &&
-      loadedState.magic == HISTORY_MAGIC &&
-      loadedState.version == HISTORY_VERSION &&
-      loadedState.size == sizeof(PersistedHistory)) {
+  size_t bytes = file.read((uint8_t*) &state, sizeof(state));
+  if (bytes == sizeof(state) &&
+      state.magic == HISTORY_MAGIC &&
+      state.version == HISTORY_VERSION &&
+      state.size == sizeof(PersistedHistory)) {
     file.close();
-    state = loadedState;
     dirty = false;
+    return true;
+  }
+  setDefaults();
+
+  file.seek(0, SeekSet);
+  PersistedHistoryV2 v2;
+  bytes = file.read((uint8_t*) &v2, sizeof(v2));
+  if (bytes == sizeof(v2) &&
+      v2.magic == HISTORY_MAGIC &&
+      v2.version == 2 &&
+      v2.size == sizeof(PersistedHistoryV2)) {
+    file.close();
+    setDefaults();
+    memcpy(state.hourly, v2.hourly, sizeof(v2.hourly));
+    memcpy(state.daily, v2.daily, sizeof(v2.daily));
+    memcpy(state.weekly, v2.weekly, sizeof(v2.weekly));
+    memcpy(state.monthly, v2.monthly, sizeof(v2.monthly));
+    memcpy(state.yearly, v2.yearly, sizeof(v2.yearly));
+    state.currentHourKey = v2.currentHourKey;
+    state.currentDayKey = v2.currentDayKey;
+    state.currentWeekKey = v2.currentWeekKey;
+    state.currentMonthKey = v2.currentMonthKey;
+    state.currentYearKey = v2.currentYearKey;
+    state.lastTotalMilliM3 = v2.lastTotalMilliM3;
+    state.haveBaseline = v2.haveBaseline;
+    dirty = true;
     return true;
   }
 
@@ -362,8 +464,8 @@ void WaterHistory::rotateBuckets(time_t localNow) {
 
   int32_t dayDelta = dayKey - state.currentDayKey;
   if (dayDelta > 0) {
-    uint8_t shifts = dayDelta > DAY_BUCKETS ? DAY_BUCKETS : dayDelta;
-    for (int8_t i = DAY_BUCKETS - 1; i >= 0; i--) {
+    uint16_t shifts = dayDelta > DAY_BUCKETS ? DAY_BUCKETS : dayDelta;
+    for (int16_t i = DAY_BUCKETS - 1; i >= 0; i--) {
       state.daily[i] = i >= shifts ? state.daily[i - shifts] : 0;
     }
     state.currentDayKey = dayKey;
@@ -375,8 +477,8 @@ void WaterHistory::rotateBuckets(time_t localNow) {
     state.currentWeekKey = weekKey;
     dirty = true;
   } else if (weekDelta > 0) {
-    uint8_t shifts = weekDelta > WEEK_BUCKETS ? WEEK_BUCKETS : weekDelta;
-    for (int8_t i = WEEK_BUCKETS - 1; i >= 0; i--) {
+    uint16_t shifts = weekDelta > WEEK_BUCKETS ? WEEK_BUCKETS : weekDelta;
+    for (int16_t i = WEEK_BUCKETS - 1; i >= 0; i--) {
       state.weekly[i] = i >= shifts ? state.weekly[i - shifts] : 0;
     }
     state.currentWeekKey = weekKey;
