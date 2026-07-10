@@ -318,6 +318,7 @@ struct GraphContext {
   uint16_t year;
   uint8_t month;
   uint8_t half;
+  uint8_t hour;
   uint16_t count;
   String range;
 };
@@ -350,6 +351,13 @@ static GraphContext makeGraphContext(char period, time_t now, const String& year
   ctx.year = graphArgYear(yearArg, graphYearFromNow(now));
   ctx.month = graphArgByte(monthArg, graphMonthFromNow(now), 1, 12);
   ctx.half = graphArgByte(halfArg, graphMonthFromNow(now) <= 6 ? 1 : 2, 1, 2);
+  ctx.hour = 0;
+  if (now != 0) {
+    struct tm* tm = gmtime(&now);
+    if (tm != nullptr) {
+      ctx.hour = (uint8_t) tm->tm_hour;
+    }
+  }
   if (period == 'd') {
     ctx.count = daysInMonth(ctx.year, ctx.month);
     ctx.range = String(monthName(ctx.month - 1)) + String(" ") + String(ctx.year);
@@ -393,7 +401,8 @@ static uint32_t graphValueAt(WaterHistory& history, const GraphContext& ctx, uin
 
 static String graphLabelAt(const GraphContext& ctx, uint16_t index) {
   if (ctx.period == 'h') {
-    return String("-") + String((ctx.count - 1 - index)) + String("h");
+    const uint8_t age = ctx.count - 1 - index;
+    return twoDigits((ctx.hour + 24 - age) % 24) + String(":00");
   }
   if (ctx.period == 'd') {
     return String(index + 1);
