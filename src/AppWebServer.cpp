@@ -663,7 +663,7 @@ static String buildWifiCard(AppConfig& config, const String& deviceIp) {
   out += F(".local</strong><small>IP address: ");
   out += htmlEscape(deviceIp);
   out += F("</small><small>Reboot after save to apply hostname and mDNS changes</small></div>");
-  out += F("</div><div class=\"wifiActions\"><button type=\"button\" onclick=\"scanWifi()\">Scan WiFi</button><button type=\"button\" onclick=\"testWifi()\">Test WiFi</button></div><div id=\"wifiResult\" class=\"wifiResult\"></div><div id=\"wifiList\" class=\"wifiList\"></div></div>");
+  out += F("</div><div class=\"wifiActions\"><button type=\"button\" onclick=\"scanWifi()\">Scan WiFi</button><button type=\"button\" onclick=\"testWifi()\">Test WiFi</button><button type=\"submit\">Save WiFi</button></div><div id=\"wifiResult\" class=\"wifiResult\"></div><div id=\"wifiList\" class=\"wifiList\"></div></div>");
   return out;
 }
 
@@ -782,9 +782,10 @@ static String buildSetupSection(AppConfig& config, WaterData& waterData, bool on
   out += htmlEscape(deviceIp);
     out += F(" 23</small></label><div class=\"statusLine\"><span>Diagnostics</span><strong><a href=\"/diagnostics.json\">Download JSON</a></strong><small>No secrets are included.</small></div><div class=\"statusLine\"><span>History import</span><strong><a href=\"/history-import\">Upload CSV</a></strong><small>Daily usage CSV: date,usage_m3</small></div></div></div>");
   }
-  out += F("<div class=\"actionRow\"><button type=\"submit\">");
-  out += wifiTab ? F("Save WiFi") : F("Save settings");
-  out += F("</button></div></form>");
+  if (!wifiTab) {
+    out += F("<div class=\"actionRow\"><button type=\"submit\">Save settings</button></div>");
+  }
+  out += F("</form>");
   if (!wifiTab) {
     out += F("<div class=\"setupCard deviceActions\"><h3>Device actions</h3><p>Restart or clear local state.</p><div class=\"actionRow\"><form method=\"post\" action=\"/reboot\"><button type=\"submit\">Reboot</button></form>");
     out += F("<form method=\"post\" action=\"/reset-config\"><button class=\"danger\" type=\"submit\" onclick=\"return confirm('Reset setup/config only? Local water history is kept.')\">Reset setup/config</button></form>");
