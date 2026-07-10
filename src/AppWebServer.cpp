@@ -263,6 +263,35 @@ static const char* monthName(uint8_t month) {
   return month < 12 ? names[month] : "";
 }
 
+static String headerUptime(uint32_t seconds) {
+  const uint32_t days = seconds / 86400;
+  const uint32_t hours = (seconds % 86400) / 3600;
+  const uint32_t minutes = (seconds % 3600) / 60;
+  if (days > 0) {
+    return String("Up ") + String(days) + String(days == 1 ? " day" : " days");
+  }
+  if (hours > 0) {
+    return String("Up ") + String(hours) + String("h ") + String(minutes) + String("m");
+  }
+  return String("Up ") + String(minutes) + String("m");
+}
+
+static String headerFreeMemory() {
+  return String("Free mem: ") + String(ESP.getFreeHeap() / 1024.0f, 1) + String("kb");
+}
+
+static String headerClock(int16_t timezoneOffsetMinutes) {
+  time_t now = localTimeNow(timezoneOffsetMinutes);
+  if (now == 0) {
+    return F("--");
+  }
+  struct tm* tm = gmtime(&now);
+  if (tm == nullptr) {
+    return F("--");
+  }
+  return String(tm->tm_mday) + String(". ") + String(monthName(tm->tm_mon)) + String(" ") + twoDigits(tm->tm_hour) + String(":") + twoDigits(tm->tm_min);
+}
+
 static int32_t dayKeyForDate(uint16_t year, uint8_t month, uint8_t day) {
   int y = year;
   int m = month;
@@ -634,7 +663,9 @@ static String setupTabs(const String& active) {
   out += active == "wifi" ? F(" active") : F("");
   out += F("\" href=\"/setup?tab=wifi\">WiFi onboarding</a><a class=\"tab");
   out += active == "hardware" ? F(" active") : F("");
-  out += F("\" href=\"/hardware\">Hardware</a></div>");
+  out += F("\" href=\"/hardware\">Hardware</a><a class=\"tab");
+  out += active == "firmware" ? F(" active") : F("");
+  out += F("\" href=\"/firmware\">Firmware</a></div>");
   return out;
 }
 
@@ -1045,7 +1076,9 @@ void AppWebServer::handleHardwarePage() {
 void AppWebServer::handleFirmwarePage() {
   String body;
   body.reserve(1300);
-  body += F("<section><h2>Firmware update</h2><dl>");
+  body += F("<section><div class=\"sectionHead\"><h2>Firmware update</h2><span>Firmware</span></div>");
+  body += setupTabs("firmware");
+  body += F("<dl>");
   body += F("<dt>Version</dt><dd>");
   body += htmlEscape(firmwareVersion());
   body += F("</dd><dt>Build</dt><dd>");
@@ -1071,7 +1104,9 @@ void AppWebServer::handleFirmwarePage() {
 void AppWebServer::handleFirmwarePost() {
   String body;
   body.reserve(900);
-  body += F("<section><h2>Firmware update</h2><dl><dt>Status</dt><dd>");
+  body += F("<section><div class=\"sectionHead\"><h2>Firmware update</h2><span>Firmware</span></div>");
+  body += setupTabs("firmware");
+  body += F("<dl><dt>Status</dt><dd>");
   body += firmwareUploadSuccess ? F("Update complete") : F("Update failed");
   body += F("</dd><dt>Message</dt><dd>");
   body += htmlEscape(firmwareUploadMessage);
@@ -1294,6 +1329,8 @@ void AppWebServer::handleDataJson() {
   json += waterData.valid ? F("true") : F("false");
   json += F(",\"uptime_s\":");
   json += String(millis() / 1000);
+  json += F(",\"free_heap\":");
+  json += String(ESP.getFreeHeap());
   json += F(",\"total_m3\":");
   json += String(waterData.totalM3(), 3);
   json += F(",\"month_start_m3\":");
@@ -1698,7 +1735,7 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("<title>Multical 21 Reader</title><style>");
   html += F("body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#eef7fb;color:#0f172a}");
   html += F("header{background:#0b3d63;color:white;padding:12px 18px;border-bottom:4px solid #38bdf8;display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;position:relative;z-index:2}main{max-width:1500px;margin:0 auto;padding:18px;display:block;clear:both}");
-  html += F("header h1{flex:0 0 auto;min-width:max-content}.topRight{flex:1 1 720px;min-width:0;display:flex;gap:12px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.statusGroup,.navLinks{display:flex;gap:7px;align-items:center;min-width:0}.statusGroup{justify-content:flex-start;flex:1 1 360px;overflow-x:auto;scrollbar-width:none}.statusGroup::-webkit-scrollbar{display:none}.navLinks{justify-content:flex-end;flex:0 0 auto;flex-wrap:wrap;border-left:1px solid #3b82a8;padding-left:12px}nav a,.statusPill{color:white;text-decoration:none;border:1px solid #3b82a8;border-radius:5px;padding:6px 9px;font-weight:800;font-size:12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:20px;box-sizing:border-box}nav svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.statusPill{border:0;min-width:72px;background:#475569;flex:0 0 auto}.statusOk{background:#0284c7}.statusWarn{background:#b7791f}.statusAlarm{background:#c92a2a}.statusOff{background:#475569}.statusDot{display:none}.statusText{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
+  html += F("header h1{flex:0 0 auto;min-width:max-content;display:flex;gap:6px;align-items:baseline}header h1 small{font-size:13px;font-weight:800;color:#bae6fd}.topRight{flex:1 1 900px;min-width:0;display:flex;gap:12px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.topInfo,.topClock{display:flex;gap:12px;align-items:center;color:#dff6ff;font-size:13px;font-weight:800;white-space:nowrap}.topInfo{flex:0 0 auto}.topClock{margin-left:auto}.statusGroup,.navLinks{display:flex;gap:7px;align-items:center;min-width:0}.statusGroup{justify-content:flex-start;flex:1 1 360px;overflow-x:auto;scrollbar-width:none}.statusGroup::-webkit-scrollbar{display:none}.navLinks{justify-content:flex-end;flex:0 0 auto;flex-wrap:wrap;border-left:1px solid #3b82a8;padding-left:12px}nav a,.statusPill{color:white;text-decoration:none;border:1px solid #3b82a8;border-radius:5px;padding:6px 9px;font-weight:800;font-size:12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:20px;box-sizing:border-box}nav svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.statusPill{border:0;min-width:72px;background:#475569;flex:0 0 auto}.statusOk{background:#0284c7}.statusWarn{background:#b7791f}.statusAlarm{background:#c92a2a}.statusOff{background:#475569}.statusDot{display:none}.statusText{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}");
   html += F("section{background:white;border:1px solid #d9e2ec;border-radius:8px;padding:16px;margin:0 0 16px}");
   html += F("h1{font-size:24px;margin:0}h2{font-size:18px;margin:0 0 12px}dl{display:grid;grid-template-columns:160px 1fr;gap:8px;margin:0}");
   html += F("dt{color:#52606d}dd{margin:0;font-weight:600}form{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}");
@@ -1716,8 +1753,14 @@ void AppWebServer::sendHtml(const String& body) {
   html += F(".minutePanel{padding-bottom:12px}.minuteBars{height:176px;display:grid;grid-template-columns:repeat(30,1fr);gap:3px;align-items:end;border-bottom:1px solid #bcccdc;padding-top:8px;overflow:hidden;background:linear-gradient(to top,#f8fafc,#fff)}.minuteWrap{height:100%;display:grid;grid-template-rows:1fr auto auto;gap:3px;min-width:0;text-align:center;color:#52606d;font-size:9px;font-style:normal}.minuteBar{align-self:end;background:#0284c7;border-radius:3px 3px 0 0;min-height:0}.minuteWrap:nth-child(2n) .minuteBar{background:#0ea5e9}.minuteWrap span{white-space:nowrap;overflow:hidden;text-overflow:clip}.minuteLiters{font-weight:700;color:#082f49}.minuteAge{color:#52606d}");
   html += F(".pinTable{width:100%;border-collapse:collapse}.pinTable th,.pinTable td{border-bottom:1px solid #d9e2ec;text-align:left;padding:9px;font-size:13px}.pinTable th{color:#52606d;text-transform:uppercase;font-size:11px}.wireDiagram{display:grid;grid-template-columns:max-content max-content max-content;gap:16px;align-items:start;overflow:auto}.wireDiagram h3{font-size:14px;margin:0 0 8px;color:#102a43}.wireDiagram code{display:block;line-height:1.8;background:#f8fafc;border:1px solid #d9e2ec;border-radius:6px;padding:10px;white-space:nowrap}.wireLines{display:grid;gap:0;margin-top:28px;color:#0b7285;font-weight:900;line-height:1.8}");
   html += F(".setupTabs{margin:-2px 0 14px}.ccModule{display:grid;grid-template-columns:max-content 220px max-content;gap:12px;align-items:stretch;overflow:auto}.ccPins{display:grid;grid-template-rows:repeat(8,1fr);gap:4px}.ccPins span,.ccAntenna span{min-width:68px;padding:6px 8px;background:#f8fafc;border:1px solid #d9e2ec;border-radius:5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800}.ccBoard{border:2px solid #147d64;background:#e6fcf5;border-radius:6px;display:grid;place-items:center;text-align:center;color:#0b7285;min-height:260px}.ccBoard strong{font-size:22px;line-height:1.35}.ccAntenna{display:grid;grid-template-rows:max-content max-content max-content 1fr;gap:6px;align-content:center}.ccAntenna i{display:block;width:40px;height:72px;border:4px solid #c2410c;border-left:0;border-bottom:0;border-radius:0 32px 0 0;margin:8px auto 0}.wiringCards{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}.boardMap{border:1px solid #d9e2ec;border-radius:8px;padding:12px;background:#f8fafc}.boardMap h3{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:0 0 10px;font-size:14px;color:#102a43}.boardMap h3 span{border:1px solid #bcccdc;background:white;border-radius:5px;padding:5px 7px}.boardMap h3 b{color:#52606d;font-size:12px;text-transform:uppercase}.boardMap table{width:100%;border-collapse:collapse}.boardMap th,.boardMap td{text-align:left;border-top:1px solid #d9e2ec;padding:7px 6px;font-size:13px}.boardMap thead th{color:#52606d;text-transform:uppercase;font-size:11px}.boardMap tbody th{width:130px;color:#52606d;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.boardMap td{font-weight:800;color:#102a43}");
-  html += F("@media(max-width:1200px){.cards{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}.graphStats{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:980px){header{align-items:flex-start}.topRight{flex:1 1 100%;justify-content:flex-start}.statusGroup,.navLinks{justify-content:flex-start;flex-wrap:wrap;overflow:visible}.navLinks{border-left:0;padding-left:0;border-top:1px solid #3b82a8;padding-top:8px;width:100%}}@media(max-width:640px){main{padding:12px}.hero{grid-template-columns:1fr}.hero h2{font-size:24px}dl{grid-template-columns:1fr}.heroMeter strong{font-size:30px}nav a span{display:none}.statusPill{min-width:62px}.bars{height:220px}.graphStats{grid-template-columns:1fr}}");
-  html += F("</style></head><body><header><h1>Multical 21 Reader</h1><nav class=\"topRight\"><div class=\"statusGroup\">");
+  html += F("@media(max-width:1200px){.cards{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}.graphStats{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:980px){header{align-items:flex-start}.topRight{flex:1 1 100%;justify-content:flex-start}.topClock{margin-left:0}.statusGroup,.navLinks{justify-content:flex-start;flex-wrap:wrap;overflow:visible}.navLinks{border-left:0;padding-left:0;border-top:1px solid #3b82a8;padding-top:8px;width:100%}}@media(max-width:640px){main{padding:12px}.hero{grid-template-columns:1fr}.hero h2{font-size:24px}dl{grid-template-columns:1fr}.heroMeter strong{font-size:30px}nav a span{display:none}.statusPill{min-width:62px}.bars{height:220px}.graphStats{grid-template-columns:1fr}}");
+  html += F("</style></head><body><header><h1>Multical 21 Reader <small>v");
+  html += htmlEscape(firmwareVersion());
+  html += F("</small></h1><nav class=\"topRight\"><div class=\"topInfo\"><span id=\"topUptime\">");
+  html += headerUptime(millis() / 1000);
+  html += F("</span><span id=\"topFreeMem\">");
+  html += headerFreeMemory();
+  html += F("</span></div><div class=\"statusGroup\">");
   html += F("<span id=\"topFramePill\" class=\"statusPill ");
   html += !waterData.radioPresent ? F("statusAlarm") : (radioLive ? F("statusOk") : (waterData.valid ? F("statusWarn") : F("statusOff")));
   html += F("\" title=\"");
@@ -1754,10 +1797,9 @@ void AppWebServer::sendHtml(const String& body) {
   html += F("<a href=\"/\" title=\"Dashboard\"><svg viewBox=\"0 0 24 24\"><path d=\"M3 12l9-9 9 9\"></path><path d=\"M5 10v10h14V10\"></path></svg><span>Dashboard</span></a>");
   html += F("<a href=\"/setup\" title=\"Setup\"><svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"3\"></circle><path d=\"M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.1 2.1-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V20h-3v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-2.1-2.1.1-.1A1.7 1.7 0 0 0 5 15a1.7 1.7 0 0 0-1.5-1H3v-3h.5A1.7 1.7 0 0 0 5 10a1.7 1.7 0 0 0-.3-1.9l-.1-.1 2.1-2.1.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V4h3v.8a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 2.1 2.1-.1.1A1.7 1.7 0 0 0 19 10a1.7 1.7 0 0 0 1.5 1h.5v3h-.5a1.7 1.7 0 0 0-1.1 1z\"></path></svg><span>Setup</span></a>");
   html += F("<a href=\"/graphs\" title=\"Graphs\"><svg viewBox=\"0 0 24 24\"><path d=\"M4 19V5\"></path><path d=\"M4 19h16\"></path><path d=\"M8 16v-4\"></path><path d=\"M12 16V8\"></path><path d=\"M16 16v-6\"></path></svg><span>Graphs</span></a>");
-  html += F("<a href=\"/firmware\" title=\"Firmware\"><svg viewBox=\"0 0 24 24\"><path d=\"M12 3v12\"></path><path d=\"M8 7l4-4 4 4\"></path><path d=\"M5 15v4h14v-4\"></path></svg><span>FW ");
-  html += htmlEscape(firmwareVersion());
-  html += F("</span></a>");
-  html += F("</div></nav></header><main>");
+  html += F("</div><span id=\"topClock\" class=\"topClock\">");
+  html += headerClock(cfg.timezoneOffsetMinutes);
+  html += F("</span></nav></header><main>");
 
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
   server.send(200, "text/html; charset=utf-8", "");
@@ -1766,8 +1808,8 @@ void AppWebServer::sendHtml(const String& body) {
   html = String();
 
   html += F("</main><script>");
-  html += F("function byId(i){return document.getElementById(i)}function txt(i,v){const e=byId(i);if(e)e.textContent=v}function title(i,v){const e=byId(i);if(e)e.title=v||''}function pill(i,c){const e=byId(i);if(e)e.className='statusPill '+c}function chip(i,c,t){const e=byId(i);if(e){e.className='chip '+c;e.textContent=t}}function rssiClass(v,p){if(!p)return'statusAlarm';if(v===null||v===undefined)return'statusOff';if(v>=-85)return'statusOk';if(v>=-100)return'statusWarn';return'statusAlarm'}function fmt(v){return Number(v||0).toFixed(3)}function uptime(s){s=Number(s)||0;const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h?h+'h '+m+'m':m+'m'}function liters(v){return Math.round((Number(v)||0)*1000)}function literLabel(v){const l=liters(v);return l?l+' L':'- L'}function refreshMinuteGraph(values){if(!values||!byId('minuteBars'))return;let buckets=new Array(30).fill(0),total=0,max=0;values.forEach((v,idx)=>{v=Number(v)||0;total+=v;const age=59-idx,b=Math.floor(age/2);if(b>=0&&b<30)buckets[b]+=v});buckets.forEach(v=>{if(v>max)max=v});txt('minuteTotal',liters(total)+' L');txt('minutePeak',liters(max)+' L/2 min');buckets.forEach((v,age)=>{const b=document.querySelector('[data-minute-bar=\"'+age+'\"]');if(!b)return;b.style.height=(!v||!max)?'0%':Math.max(3,Math.round(v*100/max))+'%';const w=b.parentElement;w.title=(age?'-'+(age*2):'now')+': '+literLabel(v);const l=w.querySelector('.minuteLiters');if(l)l.textContent=literLabel(v)})}");
-  html += F("async function refreshData(){if(!byId('topFrameText'))return;try{const j=await (await fetch('/data.json',{cache:'no-store'})).json();const age=j.last_frame_age_s;const live=j.valid&&age<90;const radioOk=j.radio_present&&j.radio_started;const a=j.alarms||{};const alarm=a.burst||a.leak;const warn=a.dry||a.reverse;pill('topFramePill',!radioOk?'statusAlarm':(live?'statusOk':(j.valid?'statusWarn':'statusOff')));title('topFramePill',(j.radio_status||'RX')+', uptime '+uptime(j.uptime_s));txt('topFrameText','RX');pill('topSignalPill',rssiClass(j.radio_rssi_dbm,j.radio_present));title('topSignalPill',j.radio_present?'Last accepted meter signal strength':'CC1101 not detected');txt('topSignalText',j.radio_rssi_dbm===null?'--dBm':j.radio_rssi_dbm+'dBm');pill('topDataPill',!j.valid?'statusOff':(alarm?'statusAlarm':(warn?'statusWarn':'statusOk')));txt('topDataText','Alarm');const ntpState=!j.ntp_enabled?'Off':(j.time_synced?'Synced':'Waiting');pill('topTimePill',j.time_synced?'statusOk':(j.ntp_enabled?'statusWarn':'statusOff'));title('topTimePill','NTP '+ntpState+', uptime '+uptime(j.uptime_s));txt('topTimeText','NTP');txt('ntpStatusValue',!j.ntp_enabled?'Disabled':(j.time_synced?'Synced':'Waiting'));let ntpHint='NTP disabled';if(j.ntp_enabled){ntpHint=j.time_synced?'Epoch '+j.time_epoch+', synced '+(j.ntp_last_sync_age_s===null?'now':j.ntp_last_sync_age_s+' s ago'):(j.wifi_connected?'Last attempt '+(j.ntp_last_attempt_age_s===null?'never':j.ntp_last_attempt_age_s+' s ago')+', attempts '+(j.ntp_attempts||0):'Waiting for WiFi')}txt('ntpStatusHint',ntpHint);txt('heroText',j.radio_status||'Waiting for radio status.');txt('heroRxAge',j.valid?age+' s':'--');txt('waterTotal',j.valid?Number(j.total_m3).toFixed(3):'--');txt('monthUsage',j.valid?Number(j.month_usage_m3).toFixed(3)+' m3':'-');chip('waterChip',j.valid?'ok':'warn',j.valid?'Live':'Waiting');chip('temperatureChip',j.valid?'ok':'warn',j.valid?'Live':'Waiting');txt('hourlyUsage',fmt(j.current_hour_m3));txt('todayUsage',fmt(j.today_m3));txt('weeklyUsage',fmt(j.current_week_m3));txt('waterTemp',j.valid?j.water_temperature_c+' \\u00b0C':'--');txt('roomTemp',j.valid?j.ambient_temperature_c+' \\u00b0C':'--');refreshMinuteGraph(j.minute_values_m3)}catch(e){}}setInterval(refreshData,5000);refreshData();");
+  html += F("function byId(i){return document.getElementById(i)}function txt(i,v){const e=byId(i);if(e)e.textContent=v}function title(i,v){const e=byId(i);if(e)e.title=v||''}function pill(i,c){const e=byId(i);if(e)e.className='statusPill '+c}function chip(i,c,t){const e=byId(i);if(e){e.className='chip '+c;e.textContent=t}}function rssiClass(v,p){if(!p)return'statusAlarm';if(v===null||v===undefined)return'statusOff';if(v>=-85)return'statusOk';if(v>=-100)return'statusWarn';return'statusAlarm'}function fmt(v){return Number(v||0).toFixed(3)}function uptime(s){s=Number(s)||0;const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h?h+'h '+m+'m':m+'m'}function uptimeLabel(s){s=Number(s)||0;const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);return d?'Up '+d+' day'+(d===1?'':'s'):(h?'Up '+h+'h '+m+'m':'Up '+m+'m')}function freeLabel(b){return'Free mem: '+(Number(b||0)/1024).toFixed(1)+'kb'}function clockLabel(e){if(!e)return'--';const d=new Date(Number(e)*1000),mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return d.getDate()+'. '+mo[d.getMonth()]+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}function liters(v){return Math.round((Number(v)||0)*1000)}function literLabel(v){const l=liters(v);return l?l+' L':'- L'}function refreshMinuteGraph(values){if(!values||!byId('minuteBars'))return;let buckets=new Array(30).fill(0),total=0,max=0;values.forEach((v,idx)=>{v=Number(v)||0;total+=v;const age=59-idx,b=Math.floor(age/2);if(b>=0&&b<30)buckets[b]+=v});buckets.forEach(v=>{if(v>max)max=v});txt('minuteTotal',liters(total)+' L');txt('minutePeak',liters(max)+' L/2 min');buckets.forEach((v,age)=>{const b=document.querySelector('[data-minute-bar=\"'+age+'\"]');if(!b)return;b.style.height=(!v||!max)?'0%':Math.max(3,Math.round(v*100/max))+'%';const w=b.parentElement;w.title=(age?'-'+(age*2):'now')+': '+literLabel(v);const l=w.querySelector('.minuteLiters');if(l)l.textContent=literLabel(v)})}");
+  html += F("async function refreshData(){if(!byId('topFrameText'))return;try{const j=await (await fetch('/data.json',{cache:'no-store'})).json();txt('topUptime',uptimeLabel(j.uptime_s));txt('topFreeMem',freeLabel(j.free_heap));txt('topClock',clockLabel(j.time_epoch));const age=j.last_frame_age_s;const live=j.valid&&age<90;const radioOk=j.radio_present&&j.radio_started;const a=j.alarms||{};const alarm=a.burst||a.leak;const warn=a.dry||a.reverse;pill('topFramePill',!radioOk?'statusAlarm':(live?'statusOk':(j.valid?'statusWarn':'statusOff')));title('topFramePill',(j.radio_status||'RX')+', uptime '+uptime(j.uptime_s));txt('topFrameText','RX');pill('topSignalPill',rssiClass(j.radio_rssi_dbm,j.radio_present));title('topSignalPill',j.radio_present?'Last accepted meter signal strength':'CC1101 not detected');txt('topSignalText',j.radio_rssi_dbm===null?'--dBm':j.radio_rssi_dbm+'dBm');pill('topDataPill',!j.valid?'statusOff':(alarm?'statusAlarm':(warn?'statusWarn':'statusOk')));txt('topDataText','Alarm');const ntpState=!j.ntp_enabled?'Off':(j.time_synced?'Synced':'Waiting');pill('topTimePill',j.time_synced?'statusOk':(j.ntp_enabled?'statusWarn':'statusOff'));title('topTimePill','NTP '+ntpState+', uptime '+uptime(j.uptime_s));txt('topTimeText','NTP');txt('ntpStatusValue',!j.ntp_enabled?'Disabled':(j.time_synced?'Synced':'Waiting'));let ntpHint='NTP disabled';if(j.ntp_enabled){ntpHint=j.time_synced?'Epoch '+j.time_epoch+', synced '+(j.ntp_last_sync_age_s===null?'now':j.ntp_last_sync_age_s+' s ago'):(j.wifi_connected?'Last attempt '+(j.ntp_last_attempt_age_s===null?'never':j.ntp_last_attempt_age_s+' s ago')+', attempts '+(j.ntp_attempts||0):'Waiting for WiFi')}txt('ntpStatusHint',ntpHint);txt('heroText',j.radio_status||'Waiting for radio status.');txt('heroRxAge',j.valid?age+' s':'--');txt('waterTotal',j.valid?Number(j.total_m3).toFixed(3):'--');txt('monthUsage',j.valid?Number(j.month_usage_m3).toFixed(3)+' m3':'-');chip('waterChip',j.valid?'ok':'warn',j.valid?'Live':'Waiting');chip('temperatureChip',j.valid?'ok':'warn',j.valid?'Live':'Waiting');txt('hourlyUsage',fmt(j.current_hour_m3));txt('todayUsage',fmt(j.today_m3));txt('weeklyUsage',fmt(j.current_week_m3));txt('waterTemp',j.valid?j.water_temperature_c+' \\u00b0C':'--');txt('roomTemp',j.valid?j.ambient_temperature_c+' \\u00b0C':'--');refreshMinuteGraph(j.minute_values_m3)}catch(e){}}setInterval(refreshData,5000);refreshData();");
   html += F("function wifiResult(kind,title,detail){const r=document.getElementById('wifiResult');if(!r)return;r.className='wifiResult show '+(kind||'');r.innerHTML='<small></small><strong></strong>';r.querySelector('small').textContent=detail||'';r.querySelector('strong').textContent=title||''}");
   html += F("async function scanWifi(){const l=document.getElementById('wifiList');wifiResult('warn','Scanning...','Looking for nearby WiFi networks');l.innerHTML='';try{const j=await (await fetch('/wifiscan.json')).json();wifiResult('ok',j.networks.length+' networks','Tap a network below to fill WiFi SSID');j.networks.forEach(n=>{const d=document.createElement('div');d.className='wifiNet';d.innerHTML='<strong></strong><small></small>';d.querySelector('strong').textContent=n.ssid||'(hidden)';d.querySelector('small').textContent=n.rssi+' dBm ch '+n.channel+(n.secure?' secure':' open');d.onclick=()=>{document.getElementById('wifiSsid').value=n.ssid};l.appendChild(d)})}catch(e){wifiResult('error','Scan failed','Try again or enter SSID manually')}}");
   html += F("async function testWifi(){wifiResult('warn','Testing...','Trying to connect with the entered credentials');const body=new URLSearchParams({ssid:document.getElementById('wifiSsid').value,password:document.getElementById('wifiPassword').value});try{const j=await (await fetch('/wifitest.json',{method:'POST',body})).json();if(j.ok){wifiResult('ok',j.ip,'Connected. Save WiFi and reboot. This is the address after boot.')}else{wifiResult('error','Failed, status '+j.status,'Check SSID/password and try again')}}catch(e){wifiResult('error','Test failed','The device did not answer the WiFi test request')}}");
