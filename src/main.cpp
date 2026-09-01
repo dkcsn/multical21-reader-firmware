@@ -299,7 +299,7 @@ static bool mqttConnect() {
   return connected;
 }
 
-static void publishHaSensor(const char* key, const char* name, const char* unit, const char* deviceClass, const char* stateClass, const char* valueTemplate) {
+static void publishHaSensor(const char* key, const char* name, const char* unit, const char* deviceClass, const char* stateClass, const char* valueTemplate, const char* entityCategory = "") {
   String node = haNodeId();
   String discoveryTopic = discoveryPrefix() + "/sensor/" + node + "/" + key + "/config";
   String payload;
@@ -330,6 +330,11 @@ static void publishHaSensor(const char* key, const char* name, const char* unit,
   if (strlen(stateClass) > 0) {
     payload += ",\"stat_cla\":\"";
     payload += stateClass;
+    payload += "\"";
+  }
+  if (strlen(entityCategory) > 0) {
+    payload += ",\"ent_cat\":\"";
+    payload += entityCategory;
     payload += "\"";
   }
   payload += ",\"dev\":{\"ids\":[\"";
@@ -366,12 +371,17 @@ static void publishHomeAssistantDiscovery() {
     return;
   }
 
-  publishHaSensor("total", "Water total", "m3", "water", "total_increasing", "{{ value_json.total_m3 }}");
-  publishHaSensor("today", "Water today", "m3", "water", "measurement", "{{ value_json.today_m3 }}");
-  publishHaSensor("last_24h", "Water last 24h", "m3", "water", "measurement", "{{ value_json.last_24h_m3 }}");
-  publishHaSensor("month", "Water month", "m3", "water", "measurement", "{{ value_json.month_usage_m3 }}");
-  publishHaSensor("water_temp", "Water temperature", "C", "temperature", "measurement", "{{ value_json.water_temperature_c }}");
-  publishHaSensor("ambient_temp", "Ambient temperature", "C", "temperature", "measurement", "{{ value_json.ambient_temperature_c }}");
+  publishHaSensor("total", "Water total", "m\302\263", "water", "total_increasing", "{{ value_json.total_m3 }}");
+  publishHaSensor("today", "Water today", "m\302\263", "water", "measurement", "{{ value_json.today_m3 }}");
+  publishHaSensor("current_hour", "Water current hour", "m\302\263", "water", "measurement", "{{ value_json.current_hour_m3 }}");
+  publishHaSensor("current_week", "Water current week", "m\302\263", "water", "measurement", "{{ value_json.current_week_m3 }}");
+  publishHaSensor("month", "Water month", "m\302\263", "water", "measurement", "{{ value_json.month_usage_m3 }}");
+  publishHaSensor("last_24h", "Water last 24 hours", "m\302\263", "water", "measurement", "{{ value_json.last_24h_m3 }}");
+  publishHaSensor("last_60m", "Water last 60 minutes", "m\302\263", "water", "measurement", "{{ value_json.last_60m_m3 }}");
+  publishHaSensor("last_31d", "Water last 31 days", "m\302\263", "water", "measurement", "{{ value_json.last_31d_m3 }}");
+  publishHaSensor("water_temp", "Water temperature", "\302\260C", "temperature", "measurement", "{{ value_json.water_temperature_c }}");
+  publishHaSensor("ambient_temp", "Ambient temperature", "\302\260C", "temperature", "measurement", "{{ value_json.ambient_temperature_c }}");
+  publishHaSensor("rssi", "Water meter RSSI", "dBm", "signal_strength", "measurement", "{{ value_json.radio_rssi_dbm }}", "diagnostic");
   publishHaSensor("last_frame_age", "Water last frame age", "s", "duration", "measurement", "{{ value_json.last_frame_age_s }}");
   publishHaBinarySensor("alarm_burst", "Water alarm burst", "{{ 'true' if value_json.alarms.burst else 'false' }}");
   publishHaBinarySensor("alarm_leak", "Water alarm leak", "{{ 'true' if value_json.alarms.leak else 'false' }}");
@@ -387,7 +397,7 @@ static void publishWaterData() {
   }
 
   String payload;
-  payload.reserve(360);
+  payload.reserve(560);
   payload += "{\"total_m3\":";
   payload += String(waterData.totalM3(), 3);
   payload += ",\"month_start_m3\":";
@@ -412,6 +422,20 @@ static void publishWaterData() {
   payload += String(waterHistory.getTodayMilliM3() / 1000.0f, 3);
   payload += ",\"last_24h_m3\":";
   payload += String(waterHistory.getLast24HoursMilliM3() / 1000.0f, 3);
+  payload += ",\"current_hour_m3\":";
+  payload += String(waterHistory.getHourMilliM3(0) / 1000.0f, 3);
+  payload += ",\"current_week_m3\":";
+  payload += String(waterHistory.getCurrentWeekMilliM3() / 1000.0f, 3);
+  uint32_t last60Minutes = 0;
+  for (uint8_t i = 0; i < 60; i++) {
+    last60Minutes += waterHistory.getMinuteMilliM3(i);
+  }
+  payload += ",\"last_60m_m3\":";
+  payload += String(last60Minutes / 1000.0f, 3);
+  payload += ",\"last_31d_m3\":";
+  payload += String(waterHistory.getLast31DaysMilliM3() / 1000.0f, 3);
+  payload += ",\"radio_rssi_dbm\":";
+  payload += waterData.radioRssiValid ? String(waterData.radioRssiDbm) : "null";
   payload += "}";
 
   mqttClient.publish(topic("state").c_str(), payload.c_str(), appConfig.data().mqttRetain);
