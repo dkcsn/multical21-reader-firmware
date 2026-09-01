@@ -908,7 +908,9 @@ void AppWebServer::handleRoot() {
   body += F("</b></div><strong><span id=\"waterTotal\">");
   body += waterData.valid ? String(waterData.totalM3(), 3) : String("--");
   body += F("</span> m3</strong><small>Month <span id=\"monthUsage\">");
-  body += waterData.valid ? formatM3(history.getMonthMilliM3(0)) + String(" m3") : String("-");
+  body += waterData.valid
+    ? formatM3(waterData.monthStartValid ? waterData.monthUsageMilliM3() : history.getMonthMilliM3(0)) + String(" m3")
+    : String("-");
   body += F("</span></small></article>");
 
   body += F("<article class=\"card accentUsage\"><div class=\"cardTop\"><span>Hourly Usage</span><b class=\"chip ok\">History</b></div><strong><span id=\"hourlyUsage\">");
@@ -1345,7 +1347,10 @@ void AppWebServer::handleDataJson() {
   json += F(",\"month_start_m3\":");
   json += String(waterData.monthStartM3(), 3);
   json += F(",\"month_usage_m3\":");
-  json += formatM3(history.getMonthMilliM3(0));
+  json += formatM3(waterData.monthStartValid ? waterData.monthUsageMilliM3() : history.getMonthMilliM3(0));
+  json += F(",\"month_usage_source\":\"");
+  json += waterData.monthStartValid ? F("meter") : F("history");
+  json += F("\"");
   json += F(",\"today_m3\":");
   json += formatM3(history.getTodayMilliM3());
   json += F(",\"current_hour_m3\":");
@@ -1397,6 +1402,8 @@ void AppWebServer::handleDataJson() {
   json += waterData.ntpLastAttemptMillis > 0 ? String((millis() - waterData.ntpLastAttemptMillis) / 1000) : F("null");
   json += F(",\"ntp_last_sync_age_s\":");
   json += waterData.ntpLastSyncMillis > 0 ? String((millis() - waterData.ntpLastSyncMillis) / 1000) : F("null");
+  json += F(",\"ntp_last_sync_epoch\":");
+  json += waterData.ntpLastSyncEpoch > 0 ? String(waterData.ntpLastSyncEpoch) : F("null");
   json += F(",\"water_temperature_c\":");
   json += waterData.waterTemperatureC;
   json += F(",\"ambient_temperature_c\":");
@@ -1507,6 +1514,8 @@ void AppWebServer::handleDiagnosticsJson() {
   json += waterData.ntpLastAttemptMillis > 0 ? String((millis() - waterData.ntpLastAttemptMillis) / 1000) : F("null");
   json += F(",\"last_sync_age_s\":");
   json += waterData.ntpLastSyncMillis > 0 ? String((millis() - waterData.ntpLastSyncMillis) / 1000) : F("null");
+  json += F(",\"last_sync_epoch\":");
+  json += waterData.ntpLastSyncEpoch > 0 ? String(waterData.ntpLastSyncEpoch) : F("null");
   json += F("},\"radio\":{\"present\":");
   json += waterData.radioPresent ? F("true") : F("false");
   json += F(",\"started\":");

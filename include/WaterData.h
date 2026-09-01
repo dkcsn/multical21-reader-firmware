@@ -13,6 +13,7 @@ struct WaterAlarms {
 struct WaterData {
   uint32_t totalMilliM3 = 0;
   uint32_t monthStartMilliM3 = 0;
+  bool monthStartValid = false;
   int8_t waterTemperatureC = 0;
   int8_t ambientTemperatureC = 0;
   int16_t radioRssiDbm = 0;
@@ -41,10 +42,17 @@ struct WaterData {
   }
 
   float monthUsageM3() const {
-    if (totalMilliM3 < monthStartMilliM3) {
+    if (!monthStartValid || totalMilliM3 < monthStartMilliM3) {
       return 0.0f;
     }
     return (totalMilliM3 - monthStartMilliM3) / 1000.0f;
+  }
+
+  uint32_t monthUsageMilliM3() const {
+    if (!monthStartValid || totalMilliM3 < monthStartMilliM3) {
+      return 0;
+    }
+    return totalMilliM3 - monthStartMilliM3;
   }
 };
 

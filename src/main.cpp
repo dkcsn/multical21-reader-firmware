@@ -10,11 +10,13 @@
   #include <ESP8266WiFi.h>
   #include <ESP8266mDNS.h>
   #include <WiFiClientSecureBearSSL.h>
+  #include <coredecls.h>
 #elif defined(ESP32)
   #include <WiFi.h>
   #include <ESPmDNS.h>
   #include <WiFiClientSecure.h>
   #include <esp_wifi.h>
+  #include <esp_sntp.h>
 #endif
 
 #include <ArduinoOTA.h>
@@ -56,8 +58,29 @@ unsigned long lastNtpAttempt = 0;
 unsigned long lastDebugHeartbeat = 0;
 bool haDiscoveryPublished = false;
 bool ntpConfigured = false;
-bool ntpSyncLogged = false;
 bool telnetDebugConfigured = false;
+volatile bool ntpSyncEventPending = false;
+volatile uint32_t ntpSyncEventEpoch = 0;
+
+#if defined(ESP32)
+static void onNtpTimeSync(struct timeval* tv) {
+  if (tv != nullptr && tv->tv_sec >= 1600000000) {
+    ntpSyncEventEpoch = (uint32_t) tv->tv_sec;
+    ntpSyncEventPending = true;
+  }
+}
+#else
+static void onSystemTimeSet(bool fromSntp) {
+  if (!fromSntp) {
+    return;
+  }
+  time_t now = time(nullptr);
+  if (now >= 1600000000) {
+    ntpSyncEventEpoch = (uint32_t) now;
+    ntpSyncEventPending = true;
+  }
+}
+#endif
 
 static String chipIdHex() {
 #if defined(ESP32)
@@ -138,6 +161,30 @@ static bool isNtpSynced() {
   return time(nullptr) >= 1600000000;
 }
 
+static void registerNtpSyncCallback() {
+#if defined(ESP32)
+  sntp_set_time_sync_notification_cb(onNtpTimeSync);
+#else
+  settimeofday_cb(onSystemTimeSet);
+#endif
+}
+
+static void processNtpSyncEvent() {
+  if (!ntpSyncEventPending) {
+    return;
+  }
+
+  const uint32_t syncEpoch = ntpSyncEventEpoch;
+  ntpSyncEventPending = false;
+  waterData.ntpLastSyncMillis = millis();
+  waterData.ntpLastSyncEpoch = syncEpoch;
+  Debug.print("NTP synced: ");
+  Debug.print(appConfig.data().ntpServer);
+  Debug.print(" at epoch ");
+  Debug.print((unsigned long) syncEpoch);
+  Debug.println();
+}
+
 static void loopNtp() {
   if (setupApMode || !appConfig.data().ntpEnabled) {
     return;
@@ -145,7 +192,6 @@ static void loopNtp() {
 
   if (WiFi.status() != WL_CONNECTED) {
     ntpConfigured = false;
-    ntpSyncLogged = false;
     return;
   }
 
@@ -153,13 +199,7 @@ static void loopNtp() {
     setupNtp();
   }
 
-  if (!ntpSyncLogged && isNtpSynced()) {
-    ntpSyncLogged = true;
-    waterData.ntpLastSyncMillis = millis();
-    waterData.ntpLastSyncEpoch = (uint32_t) time(nullptr);
-    Debug.print("NTP synced: ");
-    Debug.println(appConfig.data().ntpServer);
-  }
+  processNtpSyncEvent();
 }
 
 static bool connectWifi() {
@@ -403,7 +443,7 @@ static void publishWaterData() {
   payload += ",\"month_start_m3\":";
   payload += String(waterData.monthStartM3(), 3);
   payload += ",\"month_usage_m3\":";
-  payload += String(waterHistory.getMonthMilliM3(0) / 1000.0f, 3);
+  payload += String((waterData.monthStartValid ? waterData.monthUsageMilliM3() : waterHistory.getMonthMilliM3(0)) / 1000.0f, 3);
   payload += ",\"water_temperature_c\":";
   payload += waterData.waterTemperatureC;
   payload += ",\"ambient_temperature_c\":";
@@ -524,6 +564,7 @@ void setup() {
 
   appConfig.begin();
   waterHistory.begin();
+  registerNtpSyncCallback();
 
   const bool forceSetup = forceSetupRequested();
 

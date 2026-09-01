@@ -160,6 +160,7 @@ bool WMBusFrame::parseKamwaterDifVif(uint8_t *data, size_t len, WaterData& water
 
     if (i + 5 < len && data[i] == 0x44 && data[i + 1] == 0x13) {
       waterData.monthStartMilliM3 = readLe32(data, i + 2);
+      waterData.monthStartValid = true;
       i += 5;
       continue;
     }
@@ -241,7 +242,7 @@ void WMBusFrame::parseMeterInfo(uint8_t *data, size_t len, WaterData& waterData)
   if (data[2] == 0x79 && len >= 17 && len < 19) {
     uint32_t tt = readLe32(data, 9);
     waterData.totalMilliM3 = tt;
-    if (waterData.monthStartMilliM3 == 0 || waterData.monthStartMilliM3 > tt) {
+    if (!waterData.monthStartValid || waterData.monthStartMilliM3 > tt) {
       waterData.monthStartMilliM3 = tt;
     }
     waterData.waterTemperatureC = (int8_t) data[15];
@@ -291,6 +292,7 @@ void WMBusFrame::parseMeterInfo(uint8_t *data, size_t len, WaterData& waterData)
 
   waterData.totalMilliM3 = tt;
   waterData.monthStartMilliM3 = tg;
+  waterData.monthStartValid = true;
   waterData.waterTemperatureC = (int8_t) data[pos_ft];
   waterData.ambientTemperatureC = (int8_t) data[pos_at];
   applyStatus(data[pos_ic], waterData);

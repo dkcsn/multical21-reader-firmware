@@ -81,18 +81,28 @@ void WaterHistory::update(const WaterData& data, time_t localNow) {
   if (!state.haveBaseline) {
     state.lastTotalMilliM3 = data.totalMilliM3;
     state.haveBaseline = true;
+    if (data.monthStartValid) {
+      state.monthly[0] = data.monthUsageMilliM3();
+    }
     dirty = true;
     return;
   }
 
   if (data.totalMilliM3 < state.lastTotalMilliM3) {
     state.lastTotalMilliM3 = data.totalMilliM3;
+    if (data.monthStartValid) {
+      state.monthly[0] = data.monthUsageMilliM3();
+    }
     dirty = true;
     return;
   }
 
   uint32_t delta = data.totalMilliM3 - state.lastTotalMilliM3;
   if (delta == 0) {
+    if (data.monthStartValid && state.monthly[0] != data.monthUsageMilliM3()) {
+      state.monthly[0] = data.monthUsageMilliM3();
+      dirty = true;
+    }
     return;
   }
 
@@ -100,7 +110,11 @@ void WaterHistory::update(const WaterData& data, time_t localNow) {
   minute[0] += delta;
   state.daily[0] += delta;
   state.weekly[0] += delta;
-  state.monthly[0] += delta;
+  if (data.monthStartValid) {
+    state.monthly[0] = data.monthUsageMilliM3();
+  } else {
+    state.monthly[0] += delta;
+  }
   state.yearly[0] += delta;
   state.lastTotalMilliM3 = data.totalMilliM3;
   dirty = true;
