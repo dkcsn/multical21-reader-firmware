@@ -10,7 +10,7 @@
 #endif
 
 #ifndef FW_VERSION
-  #define FW_VERSION "1.1.12"
+  #define FW_VERSION "1.1.13"
 #endif
 
 #ifndef FW_GIT_SHA

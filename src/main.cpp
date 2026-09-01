@@ -436,14 +436,20 @@ static void publishWaterData() {
     return;
   }
 
+  const uint32_t currentMonthUsage = waterData.monthStartValid
+    ? waterData.monthUsageMilliM3()
+    : waterHistory.getMonthMilliM3(0);
+  const uint32_t currentMonthStart = waterData.monthStartValid
+    ? waterData.monthStartMilliM3
+    : (waterData.totalMilliM3 >= currentMonthUsage ? waterData.totalMilliM3 - currentMonthUsage : 0);
   String payload;
   payload.reserve(560);
   payload += "{\"total_m3\":";
   payload += String(waterData.totalM3(), 3);
   payload += ",\"month_start_m3\":";
-  payload += String(waterData.monthStartM3(), 3);
+  payload += String(currentMonthStart / 1000.0f, 3);
   payload += ",\"month_usage_m3\":";
-  payload += String((waterData.monthStartValid ? waterData.monthUsageMilliM3() : waterHistory.getMonthMilliM3(0)) / 1000.0f, 3);
+  payload += String(currentMonthUsage / 1000.0f, 3);
   payload += ",\"water_temperature_c\":";
   payload += waterData.waterTemperatureC;
   payload += ",\"ambient_temperature_c\":";

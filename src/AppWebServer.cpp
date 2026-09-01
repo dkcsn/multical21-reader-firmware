@@ -1334,6 +1334,12 @@ void AppWebServer::handleConfigJson() {
 
 void AppWebServer::handleDataJson() {
   const AppConfigData& cfg = config.data();
+  const uint32_t currentMonthUsage = waterData.monthStartValid
+    ? waterData.monthUsageMilliM3()
+    : history.getMonthMilliM3(0);
+  const uint32_t currentMonthStart = waterData.monthStartValid
+    ? waterData.monthStartMilliM3
+    : (waterData.totalMilliM3 >= currentMonthUsage ? waterData.totalMilliM3 - currentMonthUsage : 0);
   String json;
   json.reserve(1100);
   json += F("{\"valid\":");
@@ -1345,9 +1351,9 @@ void AppWebServer::handleDataJson() {
   json += F(",\"total_m3\":");
   json += String(waterData.totalM3(), 3);
   json += F(",\"month_start_m3\":");
-  json += String(waterData.monthStartM3(), 3);
+  json += formatM3(currentMonthStart);
   json += F(",\"month_usage_m3\":");
-  json += formatM3(waterData.monthStartValid ? waterData.monthUsageMilliM3() : history.getMonthMilliM3(0));
+  json += formatM3(currentMonthUsage);
   json += F(",\"month_usage_source\":\"");
   json += waterData.monthStartValid ? F("meter") : F("history");
   json += F("\"");
